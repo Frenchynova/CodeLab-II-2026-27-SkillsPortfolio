@@ -1,370 +1,280 @@
-import json
-import random
-import time
 import tkinter as tk
-from pathlib import Path
-from tkinter import ttk, messagebox
+from tkinter import messagebox
+import random
 
-
-BG = "#F2F4F3"
-WHITE = "#FFFFFF"
-INK = "#20332F"
-MUTED = "#6E7D77"
-TEAL = "#207568"
-LINE = "#DCE4DF"
-RED = "#AE473F"
-
-# Stored beside the script, making the app easy to move.
-DATA_FILE = Path(__file__).resolve().with_name("maths_studio_data.json")
+# Appearance
+BG = "#F4F5F0"
+CARD = "#FFFFFF"
+INK = "#243C32"
+MUTED = "#758078"
+GREEN = "#326B50"
+HOVER = "#285840"
+PALE = "#E7EFE8"
+LINE = "#DCE3DC"
+RED = "#AD4940"
 
 LEVELS = {
     "Easy": (0, 9),
     "Moderate": (10, 99),
     "Advanced": (1000, 9999),
 }
-OPERATIONS = {
-    "Addition": ("+",),
-    "Subtraction": ("−",),
-    "Multiplication": ("×",),
-    "Division": ("÷",),
-    "Mixed": ("+", "−", "×", "÷"),
-}
-
-
-def make_question(level, operation, negatives):
-    op = random.choice(OPERATIONS[operation])
-    low, high = LEVELS[level]
-    a, b = random.randint(low, high), random.randint(low, high)
-
-    # Keep multiplication and division practical for mental maths.
-    if op in ("×", "÷"):
-        limits = {
-            "Easy": ((1, 10), (1, 10)),
-            "Moderate": ((2, 12), (2, 12)),
-            "Advanced": ((12, 99), (2, 12)),
-        }
-        left, right = limits[level]
-        a, b = random.randint(*left), random.randint(*right)
-
-    if op == "+":
-        answer = a + b
-    elif op == "−":
-        if not negatives:
-            a, b = max(a, b), min(a, b)
-        answer = a - b
-    elif op == "×":
-        answer = a * b
-    else:
-        # Construct divisions with exact whole-number answers.
-        answer = a
-        a *= b
-
-    return {"a": a, "b": b, "op": op, "answer": answer}
-
-
-def expression(q):
-    return f'{q["a"]} {q["op"]} {q["b"]}'
-
-
-def duration(seconds):
-    seconds = int(seconds)
-    return f"{seconds // 60:02d}:{seconds % 60:02d}"
 
 
 class MathsStudio:
     def __init__(self, root):
         self.root = root
-        self.page = ""
-        self.timer = None
-        self.history = []
-        self.settings = {}
-        self.load()
+        self.playing = False
+        self.level = tk.StringVar(value="Easy")
+        self.mode = tk.StringVar(value="Mixed")
+        self.best = {}
 
         root.title("Maths Studio")
-        root.geometry("1000x800")
-        root.minsize(900, 740)
+        root.geometry("900x790")
+        root.minsize(820, 750)
         root.configure(bg=BG)
         root.protocol("WM_DELETE_WINDOW", self.close)
 
-        style = ttk.Style(root)
-        style.theme_use("clam")
-        style.configure(
-            "TCombobox", padding=7, font=("Segoe UI", 11)
-        )
-        style.configure(
-            "Horizontal.TProgressbar",
-            troughcolor=LINE,
-            background=TEAL,
-            borderwidth=0,
-            lightcolor=TEAL,
-            darkcolor=TEAL,
-        )
-        style.configure(
-            "Treeview", background=WHITE, fieldbackground=WHITE,
-            foreground=INK, rowheight=35, borderwidth=0,
-            font=("Segoe UI", 10),
-        )
-        style.configure(
-            "Treeview.Heading", background=BG, foreground=INK,
-            font=("Segoe UI", 10, "bold"), padding=9,
-        )
-        style.map("Treeview", background=[("selected", TEAL)],
-                  foreground=[("selected", WHITE)])
-
-        header = tk.Frame(root, bg=INK, padx=30, pady=15)
+        header = tk.Frame(root, bg=INK, padx=32, pady=20)
         header.pack(fill="x")
-        self.label(header, "maths studio", 20, WHITE, True).pack(side="left")
-        self.button(header, "History",
-                    lambda: self.navigate(self.show_history)).pack(side="right")
-        self.button(header, "Practice",
-                    lambda: self.navigate(self.home)).pack(side="right", padx=8)
+        self.label(header, "MATHS QUIZ", 22, CARD, True).pack(side="left")
+        self.label(header, "A PLACE TO PRACTISE", 10, "#BBCBBF").pack(
+            side="right"
+        )
 
-        self.main = tk.Frame(root, bg=BG, padx=32, pady=24)
-        self.main.pack(fill="both", expand=True)
+        self.body = tk.Frame(root, bg=BG, padx=36, pady=24)
+        self.body.pack(fill="both", expand=True)
         self.home()
 
-    def load(self):
-        try:
-            data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                return
-            settings = data.get("settings", {})
-            if isinstance(settings, dict):
-                self.settings = settings
-            rows = data.get("history", [])
-            if isinstance(rows, list):
-                self.history = [
-                    r for r in rows
-                    if isinstance(r, dict)
-                    and r.get("level") in LEVELS
-                    and r.get("operation") in OPERATIONS
-                    and type(r.get("count")) is int
-                    and 1 <= r["count"] <= 20
-                    and type(r.get("score")) is int
-                    and 0 <= r["score"] <= r["count"] * 10
-                    and type(r.get("seconds")) is int
-                    and r["seconds"] >= 0
-                    and isinstance(r.get("date"), str)
-                    and type(r.get("negatives")) is bool
-                ][-100:]
-        except (OSError, ValueError):
-            pass
-
-    def save(self):
-        try:
-            temporary = DATA_FILE.with_suffix(".tmp")
-            temporary.write_text(
-                json.dumps(
-                    {"settings": self.settings, "history": self.history},
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-            temporary.replace(DATA_FILE)
-            return True
-        except OSError:
-            return False
-
-    def label(self, parent, text, size=11, color=INK, bold=False):
+    # Small helpers keep the screen code readable.
+    def label(self, parent, text, size=12, color=INK, bold=False):
         return tk.Label(
             parent, text=text, bg=parent["bg"], fg=color,
             font=("Segoe UI", size, "bold" if bold else "normal"),
-            anchor="w", justify="left",
+            justify="left", anchor="w",
         )
 
-    def button(self, parent, text, command, primary=False):
-        bg, fg = (TEAL, WHITE) if primary else (WHITE, INK)
+    def button(self, parent, text, command, primary=True):
+        normal = GREEN if primary else PALE
+        hover = HOVER if primary else "#D8E5DA"
+        foreground = CARD if primary else INK
+
         button = tk.Button(
-            parent, text=text, command=command, bg=bg, fg=fg,
-            activebackground="#DDEAE5" if not primary else "#185C52",
-            activeforeground=fg, relief="flat", bd=0,
-            font=("Segoe UI", 11, "bold"), padx=18, pady=11,
-            cursor="hand2", highlightthickness=2,
-            highlightbackground=bg, highlightcolor="#7BA99B",
+            parent, text=text, command=command,
+            bg=normal, fg=foreground,
+            activebackground=hover, activeforeground=foreground,
+            relief="flat", bd=0, padx=22, pady=13,
+            font=("Segoe UI", 12, "bold"), cursor="hand2",
+            highlightthickness=2, highlightbackground=normal,
+            highlightcolor="#90B49C",
         )
-        button.bind("<Return>", lambda event: (button.invoke(), "break")[1])
+        button.bind("<Enter>", lambda event: button.config(bg=hover))
+        button.bind("<Leave>", lambda event: button.config(bg=normal))
+        button.bind(
+            "<Return>", lambda event: (button.invoke(), "break")[1]
+        )
         return button
 
     def card(self, parent):
         return tk.Frame(
-            parent, bg=WHITE, padx=24, pady=22,
+            parent, bg=CARD, padx=26, pady=24,
             highlightbackground=LINE, highlightthickness=1,
         )
 
-    def clear(self, page):
-        if self.timer is not None:
-            self.root.after_cancel(self.timer)
-            self.timer = None
-        self.page = page
-        for child in self.main.winfo_children():
-            child.destroy()
+    def clear(self):
+        for widget in self.body.winfo_children():
+            widget.destroy()
 
     def heading(self, title, subtitle):
-        self.label(self.main, title, 28, bold=True).pack(anchor="w")
-        self.label(self.main, subtitle, 11, MUTED).pack(
-            anchor="w", pady=(8, 22)
+        self.label(self.body, title, 29, bold=True).pack(anchor="w")
+        self.label(self.body, subtitle, 12, MUTED).pack(
+            anchor="w", pady=(8, 24)
         )
+
+    def choices(self, parent, variable, values):
+        row = tk.Frame(parent, bg=CARD)
+        row.pack(fill="x", pady=(10, 20))
+
+        for value in values:
+            tk.Radiobutton(
+                row, text=value, value=value, variable=variable,
+                indicatoron=False, bg=BG, fg=INK,
+                selectcolor=PALE, activebackground=PALE,
+                activeforeground=INK, relief="flat",
+                offrelief="flat", overrelief="flat",
+                borderwidth=0, padx=12, pady=13,
+                font=("Segoe UI", 12), cursor="hand2",
+                highlightthickness=1, highlightbackground=LINE,
+                highlightcolor=GREEN,
+            ).pack(side="left", fill="x", expand=True, padx=3)
 
     def home(self):
-        self.clear("home")
-        self.heading("A little practice goes a long way.",
-                     "Set up a session and work at your own pace.")
-
-        card = self.card(self.main)
-        card.pack(fill="x")
-        self.label(card, "Your session", 18, bold=True).pack(anchor="w")
-
-        fields = tk.Frame(card, bg=WHITE)
-        fields.pack(fill="x", pady=20)
-        self.level_var = tk.StringVar()
-        self.operation_var = tk.StringVar()
-        self.count_var = tk.StringVar()
-
-        options = [
-            ("Difficulty", self.level_var, list(LEVELS), "level", "Easy"),
-            ("Questions", self.count_var, ["5", "10", "20"], "count", "10"),
-            ("Operation", self.operation_var,
-             list(OPERATIONS), "operation", "Mixed"),
-        ]
-        for column, (title, var, values, key, default) in enumerate(options):
-            fields.columnconfigure(column, weight=1, uniform="fields")
-            frame = tk.Frame(fields, bg=WHITE)
-            frame.grid(row=0, column=column, sticky="ew", padx=(0, 15))
-            self.label(frame, title, 10, MUTED, True).pack(anchor="w", pady=(0, 8))
-            saved = str(self.settings.get(key, default))
-            var.set(saved if saved in values else default)
-            ttk.Combobox(frame, textvariable=var, values=values,
-                         state="readonly", width=18).pack(fill="x")
-
-        self.negative_var = tk.BooleanVar(
-            value=self.settings.get("negatives") is True
+        self.playing = False
+        self.clear()
+        self.heading(
+            "A little maths. A little progress.",
+            "Choose your practice, then take it one question at a time.",
         )
-        tk.Checkbutton(
-            card, text="Allow negative subtraction answers",
-            variable=self.negative_var, bg=WHITE, fg=INK,
-            activebackground=WHITE, selectcolor=WHITE,
-            font=("Segoe UI", 11),
-        ).pack(anchor="w")
+
+        card = self.card(self.body)
+        card.pack(fill="x")
+
+        self.label(card, "YOUR SESSION", 10, GREEN, True).pack(anchor="w")
+        self.label(card, "Difficulty", 15, bold=True).pack(
+            anchor="w", pady=(18, 0)
+        )
+        self.choices(card, self.level, list(LEVELS))
+
+        self.label(card, "Operation", 15, bold=True).pack(anchor="w")
+        self.choices(
+            card, self.mode, ["Addition", "Subtraction", "Mixed"]
+        )
+
         self.label(
             card,
-            "Addition / subtraction: 1, 2 or 4 digits by level.\n"
-            "Multiplication / division: times tables, then larger numbers.\n"
-            "All answers are whole numbers.",
+            "Easy: single digits    /    Moderate: two digits"
+            "    /    Advanced: four digits",
             10, MUTED,
-        ).pack(anchor="w", pady=15)
-        self.button(card, "Start session  →", self.start, True).pack(anchor="w")
+        ).pack(anchor="w", pady=(0, 16))
 
-        note = self.card(self.main)
-        note.pack(fill="x", pady=18)
-        self.label(note, "Two chances per question", 14, bold=True).pack(anchor="w")
+        self.button(card, "Start practice  →", self.start).pack(fill="x")
+
         self.label(
-            note,
-            "First try: 10 points. Second try: 5 points.\n"
-            "There’s no time limit. Review difficult questions when you finish.",
+            self.body,
+            "10 questions  ·  Two attempts  ·  No time limit",
+            12, GREEN, True,
+        ).pack(anchor="w", pady=(24, 8))
+        self.label(
+            self.body,
+            "Earn 10 points on your first try, or 5 on your second.\n"
+            "Subtraction can have a negative answer.",
             11, MUTED,
-        ).pack(anchor="w", pady=(8, 0))
-        self.label(
-            self.main, f"{len(self.history)} completed sessions saved",
-            10, MUTED,
         ).pack(anchor="w")
 
     def start(self):
-        self.settings = {
-            "level": self.level_var.get(),
-            "operation": self.operation_var.get(),
-            "count": int(self.count_var.get()),
-            "negatives": self.negative_var.get(),
+        operations = {
+            "Addition": ["+"],
+            "Subtraction": ["−"],
+            "Mixed": ["+", "−"],
         }
-        questions, seen = [], set()
-        for _ in range(self.settings["count"]):
-            for attempt in range(100):
-                q = make_question(
-                    self.settings["level"], self.settings["operation"],
-                    self.settings["negatives"],
-                )
-                key = expression(q)
-                if key not in seen:
-                    break
-            seen.add(key)
-            questions.append(q)
-        self.begin(questions, retry=False)
+        questions = []
+        seen = set()
 
-    def begin(self, questions, retry):
+        while len(questions) < 10:
+            a = random.randint(*LEVELS[self.level.get()])
+            b = random.randint(*LEVELS[self.level.get()])
+            op = random.choice(operations[self.mode.get()])
+            question = (a, b, op)
+            if question not in seen:
+                seen.add(question)
+                questions.append(question)
+
+        self.begin(questions, review=False)
+
+    def begin(self, questions, review):
         self.questions = questions
-        self.retry = retry
+        self.review = review
         self.records = []
         self.score = 0
-        self.index = 0
-        self.started = time.monotonic()
-        self.finished = False
+        self.playing = True
         self.show_question()
 
     def show_question(self):
-        self.clear("quiz")
+        if len(self.records) == len(self.questions):
+            self.results()
+            return
+
+        self.clear()
+        self.answered = False
         self.attempts = []
-        self.accepting = True
-        q = self.questions[self.index]
+        self.question = self.questions[len(self.records)]
+        a, b, op = self.question
+        self.problem = f"{a} {op} {b}"
+        self.solution = a + b if op == "+" else a - b
         total = len(self.questions)
-        self.heading(
-            f"Question {self.index + 1} of {total}",
-            "Review practice" if self.retry else
-            f'{self.settings["level"]} · {self.settings["operation"]}',
-        )
 
-        bar = tk.Frame(self.main, bg=BG)
-        bar.pack(fill="x", pady=(0, 12))
-        self.score_label = self.label(bar, f"Score  {self.score}/{total * 10}", bold=True)
-        self.score_label.pack(side="left")
-        self.clock = self.label(bar, "", color=MUTED)
-        self.clock.pack(side="right")
-        self.progress = ttk.Progressbar(
-            self.main, maximum=total, value=self.index
+        top = tk.Frame(self.body, bg=BG)
+        top.pack(fill="x", pady=(0, 14))
+        self.label(
+            top, "REVIEW PRACTICE" if self.review
+            else f"{self.level.get().upper()} / {self.mode.get().upper()}",
+            10, GREEN, True,
+        ).pack(side="left")
+        self.score_label = self.label(
+            top, f"{self.score} / {total * 10} points", 12, bold=True
         )
-        self.progress.pack(fill="x", pady=(0, 20))
+        self.score_label.pack(side="right")
 
-        card = self.card(self.main)
+        # Individual segments show completed questions.
+        self.segments = []
+        progress = tk.Frame(self.body, bg=BG)
+        progress.pack(fill="x", pady=(0, 24))
+        for index in range(total):
+            segment = tk.Frame(
+                progress, bg=GREEN if index < len(self.records) else LINE,
+                height=5,
+            )
+            segment.pack(side="left", fill="x", expand=True, padx=2)
+            self.segments.append(segment)
+
+        card = self.card(self.body)
         card.pack(fill="x")
-        self.label(card, "Work out the answer", 11, MUTED).pack(anchor="center")
-        self.label(card, expression(q) + " = ?", 38, bold=True).pack(pady=20)
+
+        self.label(
+            card, f"Question {len(self.records) + 1} of {total}", 12, MUTED
+        ).pack(anchor="center")
+        self.label(card, self.problem, 48, bold=True).pack(pady=(20, 24))
+        self.label(card, "YOUR ANSWER", 10, MUTED, True).pack()
 
         self.entry = tk.Entry(
-            card, width=18, justify="center", font=("Segoe UI", 26),
-            bg=BG, fg=INK, relief="flat", insertbackground=TEAL,
+            card, width=17, justify="center",
+            font=("Segoe UI", 27), bg=BG, fg=INK,
+            insertbackground=GREEN, relief="flat",
             highlightthickness=2, highlightbackground=LINE,
-            highlightcolor=TEAL,
+            highlightcolor=GREEN,
         )
-        self.entry.pack(ipady=10)
-        self.entry.bind("<Return>", self.submit)
-        self.feedback = self.label(card, "First attempt · 10 points available", 11, MUTED)
-        self.feedback.pack(pady=(20, 8))
-        self.action = self.button(self.main, "Check answer", self.submit, True)
-        self.action.pack(fill="x", pady=18)
-        self.label(self.main, "Press Enter to check or continue.", 10, MUTED).pack()
+        self.entry.pack(ipady=12, pady=(10, 0))
+        self.entry.bind("<Return>", self.check)
+
+        self.feedback = self.label(
+            card, "First attempt · 10 points available", 12, MUTED
+        )
+        self.feedback.pack(pady=(22, 4))
+
+        self.action = self.button(self.body, "Check answer", self.check)
+        self.action.pack(fill="x", pady=(18, 12))
+
+        bottom = tk.Frame(self.body, bg=BG)
+        bottom.pack(fill="x")
+        self.label(bottom, "Press Enter to check or continue", 10, MUTED).pack(
+            side="left"
+        )
+        self.button(
+            bottom, "End session", self.leave, primary=False
+        ).pack(side="right")
         self.entry.focus_set()
-        self.tick()
 
-    def tick(self):
-        self.clock.config(text=duration(time.monotonic() - self.started))
-        self.timer = self.root.after(1000, self.tick)
-
-    def submit(self, event=None):
-        if not self.accepting:
+    def check(self, event=None):
+        if self.answered:
             return "break"
+
         raw = self.entry.get().strip()
         try:
-            # Bound input length so accidental pastes remain manageable.
             if len(raw) > 12:
                 raise ValueError
             answer = int(raw)
         except ValueError:
-            self.feedback.config(text="Enter a whole number, such as 24 or -7.", fg=RED)
+            self.feedback.config(
+                text="Enter a whole number, such as 12 or -5.", fg=RED
+            )
             return "break"
 
-        q = self.questions[self.index]
         self.attempts.append(answer)
-        correct = answer == q["answer"]
+        correct = answer == self.solution
+
         if not correct and len(self.attempts) == 1:
-            self.feedback.config(text="Not quite. Try once more for 5 points.", fg=RED)
+            self.feedback.config(
+                text="Not quite. Try again for 5 points.", fg=RED
+            )
             self.entry.selection_range(0, "end")
             self.entry.focus_set()
             return "break"
@@ -372,188 +282,127 @@ class MathsStudio:
         points = (10 if len(self.attempts) == 1 else 5) if correct else 0
         self.score += points
         self.records.append({
-            "question": q.copy(), "attempts": self.attempts[:], "points": points
+            "question": self.question,
+            "problem": self.problem,
+            "solution": self.solution,
+            "attempts": self.attempts[:],
+            "points": points,
         })
-        self.accepting = False
+        self.answered = True
         self.entry.config(state="disabled")
         self.feedback.config(
-            text=f"Correct · +{points} points" if correct else
-            f'{expression(q)} = {q["answer"]}',
-            fg=TEAL if correct else RED,
+            text=f"Correct. You earned {points} points." if correct
+            else f"The answer is {self.solution}.",
+            fg=GREEN if correct else RED,
         )
         self.score_label.config(
-            text=f"Score  {self.score}/{len(self.questions) * 10}"
+            text=f"{self.score} / {len(self.questions) * 10} points"
         )
-        self.progress.config(value=self.index + 1)
-        if self.index + 1 == len(self.questions):
-            # Freeze duration when the final answer is checked.
-            self.elapsed = int(time.monotonic() - self.started)
-            if self.timer is not None:
-                self.root.after_cancel(self.timer)
-                self.timer = None
-            self.clock.config(text=duration(self.elapsed))
+        self.segments[len(self.records) - 1].config(bg=GREEN if correct else RED)
         self.action.config(
-            text="See results  →" if self.index + 1 == len(self.questions)
+            text="View results  →" if len(self.records) == len(self.questions)
             else "Next question  →",
-            command=self.next_question,
+            command=self.show_question,
         )
         self.action.focus_set()
         return "break"
 
-    def next_question(self):
-        if self.page != "quiz" or self.accepting:
-            return
-        self.index += 1
-        if self.index == len(self.questions):
-            self.results()
-        else:
-            self.show_question()
-
-    def table(self, headings):
-        frame = tk.Frame(self.main, bg=WHITE)
-        frame.pack(fill="both", expand=True, pady=12)
-        table = ttk.Treeview(frame, columns=headings, show="headings", height=6)
-        for title in headings:
-            table.heading(title, text=title)
-            table.column(title, anchor="center", width=140, minwidth=80)
-        scroll = ttk.Scrollbar(frame, command=table.yview)
-        table.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
-        table.pack(fill="both", expand=True)
-        table.tag_configure("retry", foreground=RED)
-        return table
-
     def results(self):
-        if self.finished:
-            return
-        self.finished = True
-        total = len(self.questions)
-        percent = round(self.score / (total * 10) * 100)
-        first = sum(r["points"] == 10 for r in self.records)
-        difficult = [
-            r["question"].copy() for r in self.records if r["points"] < 10
-        ]
-
-        # Compare only sessions with the same practice settings.
-        comparable = [
-            r["score"] for r in self.history
-            if all(r.get(k) == self.settings[k]
-                   for k in ("level", "operation", "count", "negatives"))
-        ]
-        previous = max(comparable, default=-1)
-        saved = True
-        if not self.retry:
-            self.history.append({
-                **self.settings,
-                "score": self.score,
-                "seconds": self.elapsed,
-                "date": time.strftime("%d %b %Y, %H:%M"),
-            })
-            self.history = self.history[-100:]
-            saved = self.save()
-
-        self.clear("results")
+        self.playing = False
+        self.clear()
         self.heading(
-            "Session complete",
-            "Review practice doesn’t affect your saved scores." if self.retry
-            else "Your results and answers are below.",
+            "Practice complete.",
+            "Here’s how you did. Revisit anything that needs another try.",
         )
-        summary = self.card(self.main)
+        total = len(self.questions)
+        first = sum(record["points"] == 10 for record in self.records)
+        difficult = [
+            record["question"] for record in self.records
+            if record["points"] < 10
+        ]
+
+        summary = self.card(self.body)
         summary.pack(fill="x")
-        self.label(summary, f"{self.score}/{total * 10} points", 30, bold=True).pack(anchor="w")
         self.label(
-            summary,
-            f"{percent}% score   ·   {first}/{total} correct first time"
-            f"   ·   {duration(self.elapsed)}",
-            11, MUTED,
-        ).pack(anchor="w", pady=(8, 0))
-        if not self.retry and self.score > previous:
-            self.label(
-                summary, "Best score for these settings", 10, TEAL, True
-            ).pack(anchor="w", pady=(10, 0))
-
-        controls = tk.Frame(self.main, bg=BG)
-        controls.pack(fill="x", pady=(16, 0))
-        self.label(controls, "Answer review", 14, bold=True).pack(side="left")
-        only_difficult = tk.BooleanVar(value=False)
-        table = self.table(("Question", "Your answers", "Answer", "Points"))
-
-        def refresh():
-            table.delete(*table.get_children())
-            for record in self.records:
-                if only_difficult.get() and record["points"] == 10:
-                    continue
-                q = record["question"]
-                table.insert("", "end", values=(
-                    expression(q),
-                    ", ".join(map(str, record["attempts"])),
-                    q["answer"], record["points"],
-                ), tags=("retry",) if record["points"] < 10 else ())
-
-        tk.Checkbutton(
-            controls, text="Needs practice", variable=only_difficult,
-            command=refresh, bg=BG, fg=MUTED, activebackground=BG,
-            font=("Segoe UI", 10),
+            summary, f"{self.score} / {total * 10}", 40, GREEN, True
+        ).pack(side="left")
+        self.label(
+            summary, f"{first} of {total}\ncorrect on the first try",
+            12, MUTED,
         ).pack(side="right")
-        refresh()
 
-        if not saved:
-            self.label(
-                self.main, "Couldn’t save to disk. This result is available until you close the app.",
-                10, RED,
-            ).pack(anchor="w")
+        if not self.review:
+            key = (self.level.get(), self.mode.get())
+            previous = self.best.get(key, -1)
+            self.best[key] = max(previous, self.score)
+            text = "New personal best for these settings." if self.score > previous \
+                else f"Personal best for these settings: {previous}/100"
+            self.label(self.body, text, 11, GREEN).pack(
+                anchor="w", pady=(12, 0)
+            )
 
-        actions = tk.Frame(self.main, bg=BG)
-        actions.pack(fill="x", pady=(8, 0))
-        self.button(actions, "New session", self.home).pack(side="left")
+        self.label(self.body, "Answer review", 16, bold=True).pack(
+            anchor="w", pady=(18, 10)
+        )
+
+        # A simple scrollable review using standard Tkinter.
+        review = tk.Frame(self.body, bg=CARD)
+        review.pack(fill="both", expand=True, pady=(0, 18))
+        scroll = tk.Scrollbar(review)
+        scroll.pack(side="right", fill="y")
+        text = tk.Text(
+            review, height=6, bg=CARD, fg=INK,
+            font=("Segoe UI", 12), relief="flat", bd=0,
+            padx=18, pady=12, wrap="word",
+            yscrollcommand=scroll.set,
+        )
+        text.pack(fill="both", expand=True)
+        scroll.config(command=text.yview)
+        text.tag_configure("good", foreground=GREEN)
+        text.tag_configure("retry", foreground=RED)
+        text.tag_configure("muted", foreground=MUTED)
+
+        for record in self.records:
+            tag = "good" if record["points"] == 10 else "retry"
+            text.insert(
+                "end",
+                f'{record["problem"]} = {record["solution"]}'
+                f'     +{record["points"]} points\n',
+                tag,
+            )
+            text.insert(
+                "end",
+                "Your answers: " + ", ".join(map(str, record["attempts"]))
+                + "\n\n",
+                "muted",
+            )
+        text.config(state="disabled")
+
+        actions = tk.Frame(self.body, bg=BG)
+        actions.pack(fill="x")
+        self.button(actions, "New session", self.home, False).pack(side="left")
         if difficult:
             self.button(
-                actions, f"Practise {len(difficult)} difficult questions  →",
-                lambda: self.begin(difficult, retry=True), True,
+                actions, f"Retry {len(difficult)} difficult questions  →",
+                lambda: self.begin(difficult, review=True),
             ).pack(side="right")
 
-    def show_history(self):
-        self.clear("history")
-        self.heading("Session history", "Your latest 100 completed sessions. Review practice is excluded.")
-        if not self.history:
-            card = self.card(self.main)
-            card.pack(fill="x")
-            self.label(card, "No sessions yet", 20, bold=True).pack(anchor="w")
-            self.label(card, "Finish your first session to see it here.", color=MUTED).pack(
-                anchor="w", pady=12
-            )
-            self.button(card, "Start practising", self.home, True).pack(anchor="w")
-            return
-
-        table = self.table(("Completed", "Level", "Operation", "Score", "Time"))
-        table.column("Completed", width=190)
-        for row in reversed(self.history):
-            table.insert("", "end", values=(
-                row["date"], row["level"], row["operation"],
-                f'{row["score"]}/{row["count"] * 10}',
-                duration(row["seconds"]),
-            ))
-        self.label(
-            self.main, "Scores use 10 points per question; compare like-for-like sessions.",
-            10, MUTED,
-        ).pack(anchor="w")
-
-    def navigate(self, destination):
-        if self.page == "quiz":
-            # A completed quiz should be saved even if the user leaves
-            # before clicking the results button.
-            if len(self.records) == len(self.questions):
-                self.results()
-            elif not messagebox.askyesno(
-                "Leave session?",
-                "This session is still in progress. Leave without saving it?",
-                parent=self.root,
-            ):
-                return
-        destination()
+    def leave(self):
+        if len(self.records) == len(self.questions):
+            self.results()
+        elif messagebox.askyesno(
+            "End session?", "Leave this unfinished session?", parent=self.root
+        ):
+            self.home()
 
     def close(self):
-        self.navigate(self.root.destroy)
+        if not self.playing or len(self.records) == len(self.questions):
+            self.root.destroy()
+        elif messagebox.askyesno(
+            "Close Maths Studio?", "Leave this unfinished session?",
+            parent=self.root,
+        ):
+            self.root.destroy()
 
 
 if __name__ == "__main__":

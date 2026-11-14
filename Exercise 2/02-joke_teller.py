@@ -4,176 +4,198 @@ import random
 import tkinter as tk
 from pathlib import Path
 
-BG = "#F6F2EB"
-WHITE = "#FFFFFF"
-INK = "#302638"
-MUTED = "#817887"
-ORANGE = "#F3AE58"
-BORDER = "#E7DFD6"
+# Colours and file locations
+BG = "#F4F1EB"
+PAPER = "#FFFEFA"
+INK = "#292623"
+MUTED = "#827B72"
+LINE = "#E1DCD3"
+ACCENT = "#BC573D"
+SOFT = "#EEE7DC"
 
-APP_FOLDER = Path(__file__).resolve().parent
-JOKE_FILE = APP_FOLDER / "randomJokes.txt"
-LOGO_FILE = APP_FOLDER / "joke_studio_logo.png"
-FAVOURITES_FILE = Path.home() / ".joke_studio_favourites.json"
+FOLDER = Path(__file__).resolve().parent
+JOKES_FILE = FOLDER / "randomJokes.txt"
+LOGO_FILE = FOLDER / "joke_studio_logo.png"
+SAVED_FILE = Path.home() / ".joke_studio_favourites.json"
 
 
 class JokeStudio:
     def __init__(self, root):
         self.root = root
-        self.jokes = []
-        self.bag = []
         self.current = None
         self.revealed = False
+        self.deck = []
         self.shown = 0
-        self.logo_image = None
-        self.favourites = self.loadFavourites()
+        self.logo = None
+        self.saved = self.readSaved()
+        self.jokes = self.readJokes()
 
-        root.title("Jarvis Joke Studio")
-        root.geometry("800x720")
-        root.minsize(660, 560)
+        root.title("Joke Studio")
+        root.geometry("850x760")
+        root.minsize(650, 560)
         root.configure(bg=BG)
 
+        # Scrollable page
         container = tk.Frame(root, bg=BG)
         container.pack(fill="both", expand=True)
 
         self.canvas = tk.Canvas(container, bg=BG, highlightthickness=0)
         scrollbar = tk.Scrollbar(container, command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=scrollbar.set)
+
         scrollbar.pack(side="right", fill="y")
         self.canvas.pack(fill="both", expand=True)
 
-        self.main = tk.Frame(self.canvas, bg=BG, padx=30, pady=26)
-        self.content = self.canvas.create_window(
-            (0, 0), window=self.main, anchor="nw"
+        self.page = tk.Frame(self.canvas, bg=BG, padx=34, pady=28)
+        self.page_id = self.canvas.create_window(
+            (0, 0), window=self.page, anchor="nw"
         )
-        self.main.bind(
+        self.page.bind(
             "<Configure>",
-            lambda event: self.canvas.configure(
+            lambda e: self.canvas.configure(
                 scrollregion=self.canvas.bbox("all")
             )
         )
         self.canvas.bind(
             "<Configure>",
-            lambda event: self.canvas.itemconfigure(
-                self.content, width=event.width
+            lambda e: self.canvas.itemconfigure(
+                self.page_id, width=e.width
             )
         )
-        root.bind("<MouseWheel>", self.scrollPage)
+        root.bind("<MouseWheel>", self.scroll)
 
         # Header
-        header = tk.Frame(self.main, bg=BG)
-        header.pack(fill="x", pady=(0, 22))
+        header = tk.Frame(self.page, bg=BG)
+        header.pack(fill="x")
 
         self.logo_label = tk.Label(header, bg=BG)
         self.logo_label.pack(side="left", padx=(0, 12))
         self.loadLogo()
 
-        self.label(
-            header, "Jarvis Joke Studio", 23, bold=True
-        ).pack(side="left")
-        self.button(
-            header, "Favourites", self.showFavourites
-        ).pack(side="right")
+        brand = tk.Frame(header, bg=BG)
+        brand.pack(side="left")
+        self.label(brand, "Joke Studio", 22, bold=True).pack(anchor="w")
+        self.label(brand, "A small break from the serious stuff.",
+                   10, MUTED).pack(anchor="w", pady=(3, 0))
 
-        self.label(
-            self.main, "WHAT JOKE WILL JARVIS TELL YOU?",
-            9, MUTED, True
-        ).pack(anchor="w", pady=(0, 8))
-
-        title = self.label(
-            self.main, "Jarvis Tells Jokes, You Enjoy the Punchline.",
-            25, bold=True
+        self.saved_button = self.button(
+            header, "Favourites", self.showSaved
         )
-        title.configure(wraplength=620)
-        title.pack(anchor="w", pady=(0, 12))
+        self.saved_button.pack(side="right")
 
-        self.stats = self.label(self.main, "", 10, MUTED)
-        self.stats.pack(anchor="w", pady=(0, 18))
+        self.rule(self.page, 22)
 
-        self.start_button = self.button(
-            self.main, "Jarvis tell me a Joke",
-            self.nextJoke, primary=True
+        intro = tk.Frame(self.page, bg=BG)
+        intro.pack(fill="x", pady=(0, 20))
+        self.label(intro, "A joke, on demand.", 28, bold=True).pack(
+            anchor="w"
         )
-        self.start_button.pack(fill="x", pady=(0, 18))
+        self.counter = self.label(intro, "", 10, MUTED)
+        self.counter.pack(anchor="w", pady=(7, 0))
 
-        # Joke card
+        # The main reading area
         card = tk.Frame(
-            self.main, bg=WHITE, padx=24, pady=24,
-            highlightbackground=BORDER, highlightthickness=1
+            self.page, bg=PAPER, padx=28, pady=26,
+            highlightbackground=LINE, highlightthickness=1
         )
         card.pack(fill="x")
 
-        self.card_heading = self.label(
-            card, "Jarvis Joke", 9, MUTED, True
+        card_top = tk.Frame(card, bg=PAPER)
+        card_top.pack(fill="x", pady=(0, 20))
+        self.section_label = self.label(
+            card_top, "YOUR NEXT SMALL DISTRACTION", 9, ACCENT, True
         )
-        self.card_heading.pack(anchor="w", pady=(0, 18))
+        self.section_label.pack(side="left")
+        self.number_label = self.label(card_top, "—", 11, MUTED)
+        self.number_label.pack(side="right")
 
-        self.setup = self.label(
-            card, "Ready when you are.", 22, bold=True
+        self.setup_label = self.label(
+            card, "Something to smile about.", 25, bold=True
         )
-        self.setup.configure(wraplength=570)
-        self.setup.pack(fill="x", pady=(0, 22))
+        self.setup_label.configure(wraplength=650)
+        self.setup_label.pack(fill="x", pady=(0, 22))
 
-        tk.Frame(card, bg=BORDER, height=1).pack(fill="x", pady=8)
+        tk.Frame(card, bg=LINE, height=1).pack(fill="x")
 
-        self.punchline = self.label(
-            card, "Ask Jarvis for a joke. The punchline stays hidden.",
-            15, MUTED
+        self.answer_panel = tk.Frame(card, bg=PAPER, pady=20)
+        self.answer_panel.pack(fill="x")
+
+        self.answer_caption = self.label(
+            self.answer_panel, "THE PUNCHLINE", 9, MUTED, True
         )
-        self.punchline.configure(wraplength=570)
-        self.punchline.pack(fill="x", pady=(18, 12))
-        card.bind("<Configure>", self.resizeText)
+        self.answer_caption.pack(anchor="w", pady=(0, 10))
 
-        # Main controls
-        actions = tk.Frame(self.main, bg=BG)
-        actions.pack(fill="x", pady=(18, 10))
+        self.answer_label = self.label(
+            self.answer_panel,
+            "Ask Jarvis for a joke to get started.",
+            17, MUTED
+        )
+        self.answer_label.configure(wraplength=650)
+        self.answer_label.pack(fill="x")
+        card.bind("<Configure>", self.resizeCard)
+
+        self.start_button = self.button(
+            self.page, "Jarvis tell me a Joke", self.nextJoke, primary=True
+        )
+        self.start_button.pack(fill="x", pady=(18, 10))
+
+        actions = tk.Frame(self.page, bg=BG)
+        actions.pack(fill="x")
 
         self.reveal_button = self.button(
-            actions, "Show Punchline",
-            self.showPunchline, primary=True
+            actions, "Show Punchline", self.reveal
         )
         self.reveal_button.pack(
             side="left", fill="x", expand=True, padx=(0, 5)
         )
-
         self.next_button = self.button(
-            actions, "Next Joke", self.nextJoke
+            actions, "Next Joke  →", self.nextJoke
         )
         self.next_button.pack(
             side="left", fill="x", expand=True, padx=(5, 0)
         )
 
-        extras = tk.Frame(self.main, bg=BG)
-        extras.pack(fill="x")
+        tools = tk.Frame(self.page, bg=BG)
+        tools.pack(fill="x", pady=(12, 0))
 
-        self.favourite_button = self.button(
-            extras, "Save favourite", self.toggleFavourite
+        self.save_button = self.button(
+            tools, "Save favourite", self.toggleSaved, quiet=True
         )
-        self.favourite_button.pack(side="left")
+        self.save_button.pack(side="left")
 
         self.copy_button = self.button(
-            extras, "Copy joke", self.copyJoke
+            tools, "Copy joke", self.copyJoke, quiet=True
         )
         self.copy_button.pack(side="left", padx=8)
 
         self.button(
-            extras, "Quit", root.destroy
+            tools, "Quit", root.destroy, quiet=True
         ).pack(side="right")
 
-        self.status = self.label(self.main, "", 10, MUTED)
-        self.status.configure(wraplength=620)
-        self.status.pack(anchor="w", pady=(18, 8))
+        self.status = self.label(self.page, "", 10, MUTED)
+        self.status.configure(wraplength=650)
+        self.status.pack(anchor="w", pady=(14, 0))
 
+        self.rule(self.page, 18)
         self.label(
-            self.main, "SPACE  Reveal    ·    RIGHT ARROW  Next joke",
+            self.page,
+            "SPACE  Reveal punchline       →  Next joke",
             9, MUTED
         ).pack(anchor="w")
 
-        root.bind("<Right>", self.nextShortcut)
-        root.bind("<space>", self.revealShortcut)
-        self.loadJokes()
+        root.bind("<space>", self.spaceKey)
+        root.bind("<Right>", self.nextKey)
 
-    # Interface helpers
+        if not self.jokes:
+            self.setup_label.configure(text="The jokes haven't arrived yet.")
+            self.answer_label.configure(
+                text="Place randomJokes.txt beside this Python file, "
+                     "save it as UTF-8, and restart the app."
+            )
+        self.updateControls()
+
+    # ---------- Interface ----------
+
     def label(self, parent, text, size=11, color=INK, bold=False):
         return tk.Label(
             parent, text=text, bg=parent["bg"], fg=color,
@@ -181,130 +203,124 @@ class JokeStudio:
             anchor="w", justify="left"
         )
 
-    def button(self, parent, text, command, primary=False):
-        normal = INK if primary else "#EBE5DD"
-        hover = "#4B3A56" if primary else "#DED6CB"
-        foreground = WHITE if primary else INK
+    def rule(self, parent, padding):
+        tk.Frame(parent, bg=LINE, height=1).pack(
+            fill="x", pady=padding
+        )
+
+    def button(self, parent, text, command, primary=False, quiet=False):
+        background = INK if primary else BG if quiet else SOFT
+        foreground = PAPER if primary else INK
+        hover = "#454039" if primary else "#E5DDD0"
 
         button = tk.Button(
             parent, text=text, command=command,
-            bg=normal, fg=foreground,
-            activebackground=hover, activeforeground=foreground,
-            disabledforeground="#A69BA9",
             font=("Segoe UI", 10, "bold"),
-            padx=14, pady=11, relief="flat", bd=0,
+            bg=background, fg=foreground,
+            activebackground=hover, activeforeground=foreground,
+            disabledforeground="#A59D91",
+            relief="flat", bd=0, padx=16, pady=12,
             cursor="hand2", highlightthickness=2,
-            highlightbackground=normal, highlightcolor=ORANGE
+            highlightbackground=background, highlightcolor=ACCENT
         )
-        button.bind("<Enter>", lambda event: button.configure(bg=hover))
-        button.bind("<Leave>", lambda event: button.configure(bg=normal))
+
+        def enter(event):
+            if button["state"] != "disabled":
+                button.configure(bg=hover)
+
+        button.bind("<Enter>", enter)
+        button.bind("<Leave>", lambda e: button.configure(bg=background))
+        button.bind("<space>", self.spaceKey)
 
         def activate(event):
             button.invoke()
             return "break"
 
         button.bind("<Return>", activate)
-        button.bind("<space>", self.revealShortcut)
         return button
 
-    def resizeText(self, event):
-        width = max(250, event.width - 52)
-        self.setup.configure(wraplength=width)
-        self.punchline.configure(wraplength=width)
+    def resizeCard(self, event):
+        width = max(240, event.width - 60)
+        self.setup_label.configure(wraplength=width)
+        self.answer_label.configure(wraplength=width)
 
-    def scrollPage(self, event):
+    def scroll(self, event):
         if event.widget.winfo_toplevel() != self.root:
             return
-        if self.main.winfo_reqheight() > self.canvas.winfo_height():
+        if self.page.winfo_reqheight() > self.canvas.winfo_height():
             self.canvas.yview_scroll(-3 if event.delta > 0 else 3, "units")
 
-    # Logo loads automatically; no file-picker controls.
     def loadLogo(self):
         try:
-            original = tk.PhotoImage(master=self.root, file=str(LOGO_FILE))
-            if original.width() == 0 or original.height() == 0:
+            image = tk.PhotoImage(master=self.root, file=str(LOGO_FILE))
+            if not image.width() or not image.height():
                 raise ValueError("Empty image")
-
-            scale = max(
-                1, math.ceil(max(original.width(), original.height()) / 72)
+            factor = max(
+                1, math.ceil(max(image.width(), image.height()) / 64)
             )
-            self.logo_image = original.subsample(scale)
-            self.logo_label.configure(image=self.logo_image)
-
-        except (tk.TclError, OSError, ValueError):
+            self.logo = image.subsample(factor)
+            self.logo_label.configure(image=self.logo)
+        except (OSError, ValueError, tk.TclError):
             self.logo_label.configure(
-                text="JS", font=("Segoe UI", 21, "bold"), fg=INK
+                text="JS", fg=ACCENT, font=("Segoe UI", 23, "bold")
             )
             return
 
         try:
-            self.root.iconphoto(True, self.logo_image)
+            self.root.iconphoto(True, self.logo)
         except tk.TclError:
             pass
 
-    # Read jokes
-    def loadJokes(self):
+    # ---------- Jokes ----------
+
+    def readJokes(self):
         try:
-            lines = JOKE_FILE.read_text(encoding="utf-8-sig").splitlines()
+            lines = JOKES_FILE.read_text(encoding="utf-8-sig").splitlines()
+        except (OSError, UnicodeError):
+            return []
 
-            for line in lines:
-                setup, separator, punchline = line.strip().partition("?")
-                if separator and setup.strip() and punchline.strip():
-                    joke = (setup.strip() + "?", punchline.strip())
-                    if joke not in self.jokes:
-                        self.jokes.append(joke)
+        jokes = []
+        for line in lines:
+            setup, separator, punchline = line.strip().partition("?")
+            if separator and setup.strip() and punchline.strip():
+                joke = (setup.strip() + "?", punchline.strip())
+                if joke not in jokes:
+                    jokes.append(joke)
+        return jokes
 
-            if not self.jokes:
-                raise ValueError("No valid jokes found")
-
-        except (OSError, UnicodeError, ValueError):
-            self.setup.configure(text="The joke file could not be loaded.")
-            self.punchline.configure(
-                text="Place randomJokes.txt in the same folder as this "
-                     "program. Save it as UTF-8, then restart the app."
-            )
-            self.status.configure(text="No jokes available.")
-            self.updateControls()
-            return
-
-        self.status.configure(text="Jarvis is ready when you are.")
-        self.updateControls()
-
-    # Tell jokes
     def nextJoke(self):
         if not self.jokes:
             return
 
-        # Every joke appears once before the collection repeats.
-        if not self.bag:
-            self.bag = self.jokes.copy()
-            random.shuffle(self.bag)
+        # A shuffled deck shows every joke before repeating.
+        if not self.deck:
+            self.deck = self.jokes.copy()
+            random.shuffle(self.deck)
+            if len(self.deck) > 1 and self.deck[-1] == self.current:
+                self.deck[0], self.deck[-1] = self.deck[-1], self.deck[0]
 
-            if len(self.bag) > 1 and self.bag[-1] == self.current:
-                self.bag[0], self.bag[-1] = self.bag[-1], self.bag[0]
-
-        self.current = self.bag.pop()
+        self.current = self.deck.pop()
         self.revealed = False
         self.shown += 1
 
-        self.card_heading.configure(text=f"JOKE {self.shown:02d} / THE SETUP")
-        self.setup.configure(text=self.current[0])
-        self.punchline.configure(
-            text="The punchline is one click away.", fg=MUTED
+        self.section_label.configure(text="THE SETUP")
+        self.number_label.configure(text=f"{self.shown:02d}")
+        self.setup_label.configure(text=self.current[0])
+        self.answer_caption.configure(text="TAKE A GUESS", fg=MUTED)
+        self.answer_label.configure(
+            text="The answer can wait a second.", fg=MUTED
         )
-        self.status.configure(text="Have a guess, then reveal the punchline.")
+        self.status.configure(text="")
         self.updateControls()
-        self.setup.focus_set()
+        self.setup_label.focus_set()
 
-    def showPunchline(self):
+    def reveal(self):
         if self.current is None or self.revealed:
             return
-
         self.revealed = True
-        self.punchline.configure(text=self.current[1], fg=INK)
-        self.status.configure(
-            text="Worth keeping? Save it to your favourites."
-        )
+        self.answer_caption.configure(text="THE PUNCHLINE", fg=ACCENT)
+        self.answer_label.configure(text=self.current[1], fg=INK)
+        self.status.configure(text="Keep this one, or try another.")
         self.updateControls()
 
     def updateControls(self):
@@ -323,109 +339,110 @@ class JokeStudio:
         self.copy_button.configure(
             state="normal" if self.revealed else "disabled"
         )
-        self.favourite_button.configure(
+        self.save_button.configure(
             state="normal" if selected else "disabled",
-            text="Remove favourite" if self.current in self.favourites
+            text="Remove favourite" if self.current in self.saved
             else "Save favourite"
         )
-        self.stats.configure(
-            text=f"{len(self.jokes)} jokes available    /    "
-                 f"{self.shown} shown    /    "
-                 f"{len(self.favourites)} favourites"
+        self.saved_button.configure(text=f"Favourites  ·  {len(self.saved)}")
+        self.counter.configure(
+            text=f"{len(self.jokes)} jokes in the collection"
+                 f"    /    {self.shown} told this session"
         )
 
-    # Favourites
-    def loadFavourites(self):
+    # ---------- Favourites ----------
+
+    def readSaved(self):
         try:
-            data = json.loads(FAVOURITES_FILE.read_text("utf-8"))
+            data = json.loads(SAVED_FILE.read_text("utf-8"))
             if isinstance(data, list):
                 valid = [
                     tuple(item) for item in data
-                    if isinstance(item, list)
-                    and len(item) == 2
-                    and all(
-                        isinstance(value, str) and value.strip()
-                        for value in item
-                    )
+                    if isinstance(item, list) and len(item) == 2
+                    and all(isinstance(s, str) and s.strip() for s in item)
                 ]
                 return list(dict.fromkeys(valid))
         except (OSError, ValueError):
             pass
         return []
 
-    def toggleFavourite(self):
+    def toggleSaved(self):
         if self.current is None:
             return
 
-        if self.current in self.favourites:
-            self.favourites.remove(self.current)
-            message = "Removed from favourites."
+        if self.current in self.saved:
+            self.saved.remove(self.current)
+            message = "Removed from your favourites."
         else:
-            self.favourites.append(self.current)
-            message = "Saved to favourites."
+            self.saved.append(self.current)
+            message = "Saved for another day."
 
         try:
-            temporary = FAVOURITES_FILE.with_suffix(".tmp")
+            temporary = SAVED_FILE.with_suffix(".tmp")
             temporary.write_text(
-                json.dumps(self.favourites, ensure_ascii=False, indent=2),
+                json.dumps(self.saved, ensure_ascii=False, indent=2),
                 encoding="utf-8"
             )
-            temporary.replace(FAVOURITES_FILE)
+            temporary.replace(SAVED_FILE)
         except OSError:
-            message = "Updated for this session, but could not save to disk."
+            message = "Updated for this session, but couldn't save to disk."
 
         self.status.configure(text=message)
         self.updateControls()
 
-    def showFavourites(self):
+    def showSaved(self):
         window = tk.Toplevel(self.root)
         window.title("Joke Studio — Favourites")
-        window.geometry("600x460")
+        window.geometry("620x480")
         window.minsize(400, 300)
         window.configure(bg=BG)
 
-        self.label(window, "The keepers.", 24, bold=True).pack(
-            anchor="w", padx=24, pady=20
+        self.label(window, "Worth keeping.", 25, bold=True).pack(
+            anchor="w", padx=25, pady=(24, 6)
+        )
+        self.label(window, "Your saved jokes, all in one place.", 10, MUTED).pack(
+            anchor="w", padx=25, pady=(0, 20)
         )
 
-        frame = tk.Frame(window, bg=BG)
-        frame.pack(fill="both", expand=True, padx=24, pady=(0, 24))
+        frame = tk.Frame(window, bg=PAPER)
+        frame.pack(fill="both", expand=True, padx=25, pady=(0, 25))
 
         text = tk.Text(
-            frame, wrap="word", font=("Segoe UI", 12),
-            bg=WHITE, fg=INK, relief="flat", padx=18, pady=18
+            frame, wrap="word", bg=PAPER, fg=INK,
+            font=("Segoe UI", 12), relief="flat", padx=20, pady=20
         )
         scrollbar = tk.Scrollbar(frame, command=text.yview)
         text.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
         text.pack(fill="both", expand=True)
+        text.tag_configure("setup", font=("Segoe UI", 12, "bold"))
 
-        if self.favourites:
-            for number, (setup, punchline) in enumerate(self.favourites, 1):
-                text.insert("end", f"{number}. {setup}\n{punchline}\n\n")
-        else:
-            text.insert("end", "No favourites yet. Save a joke you enjoy.")
+        if not self.saved:
+            text.insert("end", "Nothing saved yet. Keep a joke you enjoy.")
+        for number, (setup, answer) in enumerate(self.saved, 1):
+            text.insert("end", f"{number:02d}   {setup}\n", "setup")
+            text.insert("end", f"{answer}\n\n")
 
         text.configure(state="disabled")
 
-    # Clipboard and shortcuts
+    # ---------- Clipboard and shortcuts ----------
+
     def copyJoke(self):
         if self.current is None or not self.revealed:
             return
-
         try:
             self.root.clipboard_clear()
             self.root.clipboard_append("\n".join(self.current))
-            self.status.configure(text="Joke copied to your clipboard.")
+            self.status.configure(text="Copied. Go make someone groan.")
         except tk.TclError:
-            self.status.configure(text="The clipboard is currently unavailable.")
+            self.status.configure(text="The clipboard is unavailable right now.")
 
-    def revealShortcut(self, event=None):
+    def spaceKey(self, event=None):
         if event is None or event.widget.winfo_toplevel() == self.root:
-            self.showPunchline()
+            self.reveal()
         return "break"
 
-    def nextShortcut(self, event=None):
+    def nextKey(self, event=None):
         if event is None or event.widget.winfo_toplevel() == self.root:
             self.nextJoke()
         return "break"

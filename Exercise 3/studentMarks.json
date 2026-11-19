@@ -1,0 +1,115 @@
+{
+  "student_count": 11,
+  "students": [
+    {
+      "number": 1345,
+      "name": "John Curry",
+      "coursework": [
+        8,
+        15,
+        7
+      ],
+      "exam": 45
+    },
+    {
+      "number": 2345,
+      "name": "Sam Sturtivant",
+      "coursework": [
+        14,
+        15,
+        14
+      ],
+      "exam": 77
+    },
+    {
+      "number": 9876,
+      "name": "Lee Scott",
+      "coursework": [
+        17,
+        11,
+        16
+      ],
+      "exam": 99
+    },
+    {
+      "number": 3724,
+      "name": "Matt Thompson",
+      "coursework": [
+        19,
+        11,
+        15
+      ],
+      "exam": 81
+    },
+    {
+      "number": 1212,
+      "name": "Ron Herrema",
+      "coursework": [
+        14,
+        17,
+        18
+      ],
+      "exam": 66
+    },
+    {
+      "number": 8439,
+      "name": "Jake Hobbs",
+      "coursework": [
+        10,
+        11,
+        10
+      ],
+      "exam": 43
+    },
+    {
+      "number": 2344,
+      "name": "Jo Hyde",
+      "coursework": [
+        6,
+        15,
+        10
+      ],
+      "exam": 55
+    },
+    {
+      "number": 9384,
+      "name": "Gareth Southgate",
+      "coursework": [
+        5,
+        6,
+        8
+      ],
+      "exam": 33
+    },
+    {
+      "number": 8327,
+      "name": "Alan Shearer",
+      "coursework": [
+        20,
+        20,
+        20
+      ],
+      "exam": 100
+    },
+    {
+      "number": 2983,
+      "name": "Les Ferdinand",
+      "coursework": [
+        15,
+        17,
+        18
+      ],
+      "exam": 92
+    },
+    {
+      "number": 1231,
+      "name": "BOB",
+      "coursework": [
+        15,
+        12,
+        16
+      ],
+      "exam": 88
+    }
+  ]
+}

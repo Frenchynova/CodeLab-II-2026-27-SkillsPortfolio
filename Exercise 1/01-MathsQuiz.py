@@ -1,70 +1,29 @@
-import tkinter as tk
-from tkinter import ttk
-from pathlib import Path
+"""Floor Zero: a ten-guest arithmetic game. Run with Python 3 and Tkinter."""
+import math
 import random
+import tkinter as tk
+from pathlib import Path
 
-BG, GREEN, INK = "#F4F5F0", "#326B50", "#243C32"
-LEVELS = {"Easy": (0, 9), "Moderate": (10, 99), "Advanced": (1000, 9999)}
-best = {}
-screen = "menu"
-
-root = tk.Tk()
-root.title("Maths Studio")
-root.geometry("620x600")
-root.configure(bg=BG)
-
-header = tk.Frame(root, bg=INK, padx=20, pady=15)
-header.pack(fill="x")
 try:
-    image = tk.PhotoImage(
-        file=str(Path(__file__).resolve().parent / "maths_studio_logo.png")
-    )
-    logo = image.subsample(max(1, (max(image.width(), image.height()) + 47) // 48))
-    tk.Label(header, image=logo, bg=INK).pack(side="left", padx=(0, 12))
-    root.iconphoto(True, logo)
-except (tk.TclError, OSError):
-    pass
+    import winsound
+except ImportError:
+    winsound = None
 
-tk.Label(header, text="MATHS QUIZ", bg=INK, fg="white",
-         font=("Segoe UI", 20, "bold")).pack(side="left")
-body = tk.Frame(root, bg=BG, padx=30, pady=20)
-body.pack(fill="both", expand=True)
-
-
-def clear():
-    for widget in body.winfo_children():
-        widget.destroy()
-
-
-def label(text, size=14):
-    widget = tk.Label(body, text=text, bg=BG, fg=INK,
-                      font=("Segoe UI", size), wraplength=520)
-    widget.pack(pady=12)
-    return widget
-
-
-def button(text, command):
-    widget = tk.Button(body, text=text, command=command, bg=GREEN,
-                       fg="white", font=("Segoe UI", 12), relief="flat", pady=10)
-    widget.pack(fill="x", pady=6)
-    return widget
-
-
-def displayMenu():
-    global screen
-    screen = "menu"
-    clear()
-    label("A little maths. A little progress.", 23)
-    for level in LEVELS:
-        record = f" • Best: {best[level]}/100" if level in best else ""
-        button(level + record, lambda chosen=level: start(chosen))
-    label("10 questions • Two attempts\nFirst try: 10 points • Second try: 5 points", 11)
-
-
-def start(level):
-    global difficulty, score, question
-    difficulty, score, question = level, 0, 0
-    displayProblem()
+ASSETS = Path(__file__).resolve().with_name("rooms")
+INK, PANEL, GOLD, IVORY, WINE = "#191917", "#292923", "#dfbe86", "#faf0dc", "#893d35"
+LEVELS = {"Easy": (0, 9), "Moderate": (10, 99), "Advanced": (1000, 9999)}
+GUESTS = [
+    ("The bather", "The tide is coming in. I brought my own tub.", "The underground beach"),
+    ("The botanist", "My orchids only open after midnight.", "The night garden"),
+    ("The astronomer", "Saturn has drifted out of its case again.", "The pocket planetarium"),
+    ("The clockmaker", "Someone has ordered a spare Thursday.", "The clock workshop"),
+    ("The pastry chef", "Careful with the cake. It has six storeys.", "The sugar salon"),
+    ("The explorer", "My sled dogs heard snow behind these doors.", "The winter camp"),
+    ("The cellist", "The audience is seated. I have the final note.", "The velvet stage"),
+    ("The librarian", "This atlas has started writing itself.", "The endless library"),
+    ("The diver", "Tonight the jellyfish are giving a recital.", "The glass ocean"),
+    ("The early riser", "A table for one, just above the clouds.", "The sunrise terrace"),
+]
 
 
 def randomInt(level):
@@ -72,89 +31,221 @@ def randomInt(level):
 
 
 def decideOperation():
-    return random.choice(["+", "-"])
+    return random.choice(("+", "−"))
 
 
-def displayProblem():
-    global question, attempt, solution, screen, entry, feedback, action, bar
-    if question == 10:
-        displayResults()
-        return
-    clear()
-    question += 1
-    attempt, screen = 1, "answer"
-    a, b, operation = randomInt(difficulty), randomInt(difficulty), decideOperation()
-    solution = a + b if operation == "+" else a - b
-    label(f"{difficulty} • Question {question}/10 • Score: {score}", 12)
-    bar = ttk.Progressbar(body, maximum=10, value=question - 1)
-    bar.pack(fill="x", pady=8)
-    label(f"{a} {operation} {b} = ?", 36)
-    entry = tk.Entry(body, font=("Segoe UI", 22), justify="center")
-    entry.pack(pady=10, ipady=8)
-    entry.focus_set()
-    feedback = label("Enter your answer.", 12)
-    action = button("Check answer", check)
-    label("Press Enter to check or continue.", 10)
+def isCorrect(answer, destination):
+    return answer == destination
 
 
-def isCorrect(answer):
-    return answer == solution
+class Hotel:
+    def __init__(self, root):
+        self.root = root
+        root.title("Floor Zero  ·  The Impossible Hotel")
+        root.resizable(False, False)
+        self.c = tk.Canvas(root, width=900, height=540, bg=INK, highlightthickness=0)
+        self.c.pack()
+        self.art = {p.stem: tk.PhotoImage(file=str(p)) for p in ASSETS.glob("*.png")}
+        self.best, self.muted = {}, False
+        self.home()
+
+    def text(self, x, y, value, size=15, color=IVORY, face="Georgia", **opts):
+        return self.c.create_text(x, y, text=value, anchor="nw", fill=color,
+                                  font=(face, -size), **opts)
+
+    def image(self, x, y, name):
+        return self.c.create_image(x, y, image=self.art[str(name)], anchor="nw")
+
+    def button(self, x, y, w, h, title, action, color=PANEL):
+        b = tk.Button(self.c, text=title, command=action, bg=color, fg=IVORY, bd=0,
+                      activebackground="#685540", activeforeground=IVORY, cursor="hand2",
+                      font=("Segoe UI", -15, "bold"), relief="flat", highlightthickness=0)
+        self.c.create_window(x, y, window=b, anchor="nw", width=w, height=h)
+        return b
+
+    def clear(self):
+        self.root.unbind("<Return>")
+        self.c.delete("all")
+        for w in self.c.winfo_children():
+            w.destroy()
+
+    def sound(self, name):
+        if self.muted:
+            return
+        if winsound:
+            try:
+                winsound.PlaySound(str(ASSETS / (name + ".wav")), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            except RuntimeError:
+                pass
+        elif name in ("bell", "finish"):
+            self.root.bell()
+
+    def audio(self):
+        def toggle():
+            self.muted = not self.muted
+            switch.config(text="Sound off" if self.muted else "Sound on")
+            self.sound("key")
+        switch = self.button(795, 12, 92, 28, "Sound off" if self.muted else "Sound on", toggle)
+
+    def home(self):
+        self.clear()
+        self.image(0, 0, "title")
+        self.button(36, 435, 200, 48, "Enter the hotel   →", self.displayMenu, WINE)
+        self.root.bind("<Return>", lambda _: self.displayMenu())
+        self.audio()
+
+    def displayMenu(self):
+        self.clear()
+        self.text(35, 35, "F L O O R   Z E R O", 14, GOLD, "Bahnschrift")
+        self.text(32, 80, "Choose your shift", 48)
+        self.text(35, 153, "Guide ten guests. A first-stop arrival earns 10 points. A second stop earns 5.", 17)
+        for i, (level, room) in enumerate(zip(LEVELS, (0, 2, 9))):
+            x = 35 + 284*i
+            self.image(x, 211, f"ticket{room}")
+            self.button(x, 353, 262, 55, level + "   →", lambda choice=level: self.start(choice), WINE)
+            low, high = LEVELS[level]
+            detail = f"Operands {low:,}–{high:,}"
+            if level in self.best:
+                detail += f"   ·   Best {self.best[level]}/100"
+            self.text(x, 421, detail, 15, GOLD, "Segoe UI")
+        self.button(35, 480, 128, 34, "←   Lobby", self.home)
+        self.audio()
+
+    def start(self, level):
+        self.level, self.scores = level, []
+        self.guests = random.sample(range(10), 10)
+        self.displayProblem()
+
+    def displayProblem(self):
+        if len(self.scores) == 10:
+            return self.displayResults()
+        self.clear()
+        self.guest = self.guests[len(self.scores)]
+        name, quote, _ = GUESTS[self.guest]
+        a, b, op = randomInt(self.level), randomInt(self.level), decideOperation()
+        self.target = a + b if op == "+" else a - b
+        self.floor, self.take, self.state = a, 1, "answer"
+        self.room = self.image(125, 114, 10)
+        self.doors = [self.image(x, 114, side) for x, side in [(125,"left"), (238,"right")]]
+        self.image(0, 0, "wall")
+        self.needle = self.c.create_line(239, 94, 239, 29, fill="#f4cb80", width=3)
+        self.indicator = self.c.create_text(240, 526, fill=GOLD, font=("Consolas", -20))
+        self.dial(a)
+        self.text(505, 27, f"{self.level.upper()}   /   GUEST {len(self.scores)+1:02d} OF 10", 14, GOLD, "Bahnschrift")
+        self.text(503, 69, name, 37)
+        self.text(505, 121, f"“{quote}”", 18, IVORY, "Georgia", width=362)
+        self.text(505, 188, "REQUEST   /   " + ("GO UP" if op == "+" else "GO DOWN"), 13, GOLD, "Bahnschrift")
+        self.text(504, 210, f"{a}  {op}  {b}  =", 34)
+        self.number = tk.StringVar()
+        self.entry = tk.Entry(self.c, textvariable=self.number, justify="center", bg="#fbf0d8",
+                              fg=INK, font=("Consolas", -26), bd=0)
+        self.c.create_window(505, 271, anchor="nw", window=self.entry, width=224, height=40)
+        self.go = self.button(738, 271, 132, 40, "GO   ↵", self.dispatch, WINE)
+        for i, symbol in enumerate("123456789±0⌫"):
+            self.button(505+(i%3)*76, 320+(i//3)*37, 71, 33, symbol, lambda s=symbol: self.key(s))
+        self.points = self.text(743, 327, f"{sum(self.scores)} / 100", 21, GOLD)
+        self.text(743, 360, "SHIFT SCORE", 12, GOLD, "Bahnschrift")
+        self.feedback = self.text(505, 475, "Enter a floor number or use the keypad.", 17, IVORY, "Segoe UI", width=370)
+        self.entry.focus_set()
+        self.root.bind("<Return>", lambda _: self.dispatch())
+        self.audio()
+
+    def key(self, symbol):
+        if self.state != "answer":
+            return
+        value = self.number.get()
+        if symbol == "⌫":
+            value = value[:-1]
+        elif symbol == "±":
+            value = value[1:] if value.startswith("-") else "-" + value
+        elif len(value) < 6:
+            value += symbol
+        self.number.set(value)
+        self.sound("key")
+        self.entry.focus_set()
+
+    def dispatch(self):
+        if self.state == "next":
+            return self.displayProblem()
+        if self.state != "answer":
+            return
+        try:
+            floor = int(self.number.get())
+            if abs(floor) > 99999:
+                raise ValueError
+        except ValueError:
+            self.c.itemconfig(self.feedback, text="Enter a whole floor from −99,999 to 99,999.")
+            return
+        self.state = "riding"
+        self.entry.config(state="disabled")
+        self.go.config(state="disabled")
+        self.c.itemconfig(self.feedback, text="Lift in motion…")
+        self.sound("ride")
+        self.travel(floor, 0)
+
+    def dial(self, floor):
+        limit = 2 * LEVELS[self.level][1]
+        angle = math.radians(90 - 69 * max(-1, min(1, floor / limit)))
+        self.c.coords(self.needle, 239, 94, 239+66*math.cos(angle), 94-66*math.sin(angle))
+        self.c.itemconfig(self.indicator, text=f"FLOOR   {floor}")
+
+    def travel(self, floor, tick):
+        # Close after a retry, move the counter, then slide both doors behind the facade.
+        gap = max(0, 1-tick/5) if self.take == 2 else 0
+        gap = max(gap, min(1, max(0, (tick-15)/10)))
+        for door, x, direction in zip(self.doors, (125,238), (-1,1)):
+            self.c.coords(door, x + direction*113*gap, 114)
+        progress = min(1, max(0, (tick-5)/10))
+        shown = round(self.floor + (floor-self.floor)*progress)
+        self.dial(shown)
+        if tick == 6:
+            self.c.itemconfig(self.room, image=self.art[str(self.guest if isCorrect(floor,self.target) else 10)])
+        if tick == 25:
+            return self.arrive(floor)
+        self.root.after(30, self.travel, floor, tick+1)
+
+    def arrive(self, floor):
+        self.floor = floor
+        correct = isCorrect(floor, self.target)
+        self.sound("bell" if correct else "miss")
+        self.go.config(state="normal")
+        if not correct and self.take == 1:
+            self.state, self.take = "answer", 2
+            distance = self.target-floor
+            direction = "up" if distance > 0 else "down"
+            message = f"Wrong landing. Go {direction} {abs(distance):,} more. Enter the new floor."
+            self.entry.config(state="normal")
+            self.number.set("")
+            self.entry.focus_set()
+        else:
+            points = (10 if self.take == 1 else 5) if correct else 0
+            self.scores.append(points)
+            self.state = "next"
+            room = GUESTS[self.guest][2]
+            message = f"{room}. Guest delivered!  +{points}" if correct else f"Missed stop. {room} was on floor {self.target}."
+            self.c.itemconfig(self.points, text=f"{sum(self.scores)} / 100")
+            self.go.config(text="Finish shift" if len(self.scores)==10 else "Next guest   →")
+        self.c.itemconfig(self.feedback, text=message)
+
+    def displayResults(self):
+        self.clear()
+        score = sum(self.scores)
+        self.best[self.level] = max(score, self.best.get(self.level, 0))
+        grade = next(g for mark,g in [(91,"A+"),(80,"A"),(70,"B"),(60,"C"),(50,"D"),(0,"F")] if score >= mark)
+        self.image(125, 114, 11)
+        self.image(0, 0, "wall")
+        self.text(507, 75, "H O T E L   R E G I S T E R", 14, GOLD, "Bahnschrift")
+        self.text(505, 116, "Shift complete", 43)
+        self.text(507, 200, f"{score} / 100", 47, GOLD)
+        self.text(507, 272, f"Grade {grade}    ·    {self.level} best {self.best[self.level]}/100", 19)
+        self.text(507, 326, f"{self.scores.count(10)} first stops   ·   {self.scores.count(5)} second stops\n{self.scores.count(0)} missed destinations", 17)
+        self.button(507, 419, 178, 43, "Another shift", self.displayMenu, WINE)
+        self.button(694, 419, 122, 43, "Lobby", self.home)
+        self.audio()
+        self.sound("finish")
 
 
-def check():
-    global score, attempt, screen
-    if screen != "answer":
-        return
-    try:
-        answer = int(entry.get())
-    except ValueError:
-        feedback.config(text="Please enter a whole number.")
-        return
-    if isCorrect(answer):
-        points = 10 if attempt == 1 else 5
-        score += points
-        feedback.config(text=f"Correct! +{points} points.")
-    elif attempt == 1:
-        attempt = 2
-        feedback.config(text="Try again for 5 points.")
-        entry.delete(0, tk.END)
-        entry.focus_set()
-        return
-    else:
-        feedback.config(text=f"The correct answer is {solution}.")
-    screen = "next"
-    entry.config(state="disabled")
-    bar["value"] = question
-    action.config(text="Results" if question == 10 else "Next question",
-                  command=displayProblem)
-
-
-def displayResults():
-    global screen
-    screen = "results"
-    clear()
-    best[difficulty] = max(best.get(difficulty, 0), score)
-    grade = "F"
-    for minimum, letter in [(91, "A+"), (80, "A"), (70, "B"), (60, "C"), (50, "D")]:
-        if score >= minimum:
-            grade = letter
-            break
-    label("Practice complete.", 26)
-    label(f"{score}/100 • Grade: {grade}", 30)
-    label(f"Personal best: {best[difficulty]}/100")
-    button("Play again", displayMenu)
-    button("Quit", root.destroy)
-    label("Personal bests reset when the app closes.", 10)
-
-
-def enter(event):
-    if screen == "answer":
-        check()
-    elif screen == "next":
-        displayProblem()
-    return "break"
-
-
-root.bind("<Return>", enter)
-displayMenu()
-root.mainloop()
+if __name__ == "__main__":
+    window = tk.Tk()
+    Hotel(window)
+    window.mainloop()

@@ -1,200 +1,215 @@
-import tkinter as tk
-from tkinter.scrolledtext import ScrolledText
-from pathlib import Path
+"""Second Impression — a two-colour joke press. Python 3 + Tkinter."""
+import json
 import random
+import tkinter as tk
+from pathlib import Path
 
-BG, PAPER, INK = "#F4F1EB", "#FFFEFA", "#292623"
-MUTED, ACCENT = "#827B72", "#A39479"
-FOLDER = Path(__file__).resolve().parent
-jokes, deck, favourites = [], [], []
-current, revealed, shown = None, False, 0
-
-root = tk.Tk()
-root.title("Joke Studio")
-root.geometry("720x720")
-root.minsize(660, 700)
-root.configure(bg=BG)
-
-
-def label(parent, text, size=12, color=INK):
-    widget = tk.Label(
-        parent, text=text, bg=parent["bg"], fg=color,
-        font=("Segoe UI", size), wraplength=580, justify="left"
-    )
-    widget.pack(anchor="w", pady=8)
-    return widget
-
-
-def button(parent, text, command):
-    widget = tk.Button(
-        parent, text=text, command=command,
-        bg=INK, fg=PAPER, activebackground=ACCENT,
-        activeforeground=PAPER, font=("Segoe UI", 11),
-        relief="flat", padx=16, pady=11, cursor="hand2"
-    )
-    return widget
-
-
-def readJokes():
-    try:
-        lines = (FOLDER / "randomJokes.txt").read_text(
-            encoding="utf-8-sig"
-        ).splitlines()
-    except (OSError, UnicodeError):
-        return
-    for line in lines:
-        setup, separator, answer = line.strip().partition("?")
-        if separator and setup.strip() and answer.strip():
-            joke = (setup.strip() + "?", answer.strip())
-            if joke not in jokes:
-                jokes.append(joke)
-
-
-def nextJoke():
-    global current, revealed, shown, deck
-    if not jokes:
-        return
-    if not deck:
-        deck = jokes.copy()
-        random.shuffle(deck)
-        if len(deck) > 1 and deck[-1] == current:
-            deck[0], deck[-1] = deck[-1], deck[0]
-
-    current = deck.pop()
-    revealed = False
-    shown += 1
-    setup_label.config(text=current[0])
-    answer_label.config(text="Take a guess before revealing the answer.", fg=MUTED)
-    status.config(text="")
-    reveal_button.config(state="normal")
-    copy_button.config(state="disabled")
-    updateControls()
-
-
-def reveal():
-    global revealed
-    if current is None or revealed:
-        return
-    revealed = True
-    answer_label.config(text=current[1], fg=ACCENT)
-    reveal_button.config(state="disabled")
-    copy_button.config(state="normal")
-
-
-def updateControls():
-    counter.config(text=f"{len(jokes)} jokes available  /  {shown} told this session")
-    save_button.config(
-        state="normal" if current else "disabled",
-        text="Remove favourite" if current in favourites else "Save favourite"
-    )
-    favourites_button.config(text=f"Favourites ({len(favourites)})")
-
-
-def saveFavourite():
-    if current is None:
-        return
-    if current in favourites:
-        favourites.remove(current)
-        status.config(text="Removed from favourites.")
-    else:
-        favourites.append(current)
-        status.config(text="Saved for this app session.")
-    updateControls()
-
-
-def showFavourites():
-    window = tk.Toplevel(root)
-    window.title("Your favourites")
-    window.geometry("550x420")
-    window.configure(bg=BG)
-    label(window, "  Worth keeping.", 24)
-
-    text = ScrolledText(
-        window, wrap="word", font=("Segoe UI", 12),
-        bg=PAPER, fg=INK, relief="flat", padx=15, pady=15
-    )
-    text.pack(fill="both", expand=True, padx=20, pady=15)
-    if not favourites:
-        text.insert("end", "No favourites yet.")
-    for number, (setup, answer) in enumerate(favourites, 1):
-        text.insert("end", f"{number}. {setup}\n{answer}\n\n")
-    text.config(state="disabled")
-
-
-def copyJoke():
-    if current is not None and revealed:
-        try:
-            root.clipboard_clear()
-            root.clipboard_append("\n".join(current))
-            status.config(text="Copied to your clipboard.")
-        except tk.TclError:
-            status.config(text="The clipboard is unavailable.")
-
-
-# Header and optional logo
-header = tk.Frame(root, bg=BG, padx=28, pady=18)
-header.pack(fill="x")
 try:
-    image = tk.PhotoImage(file=str(FOLDER / "joke_studio_logo.png"))
-    scale = max(1, (max(image.width(), image.height()) + 55) // 56)
-    logo = image.subsample(scale)
-    tk.Label(header, image=logo, bg=BG).pack(side="left", padx=(0, 12))
-    root.iconphoto(True, logo)
-except (tk.TclError, OSError):
-    pass
+    import winsound
+except ImportError:
+    winsound = None
 
-tk.Label(
-    header, text="Joke Studio", bg=BG, fg=INK,
-    font=("Segoe UI", 23, "bold")
-).pack(side="left")
-favourites_button = button(header, "Favourites", showFavourites)
-favourites_button.pack(side="right")
+HERE = Path(__file__).resolve().parent
+INK, RED, PAPER, DESK = "#223761", "#a83d32", "#faf2dc", "#dedbcf"
+ZINE = Path.home() / ".second-impression" / "zine.json"
 
-body = tk.Frame(root, bg=BG, padx=30, pady=8)
-body.pack(fill="both", expand=True)
-label(body, "A joke, on demand.", 28)
-counter = label(body, "", 10, MUTED)
 
-card = tk.Frame(
-    body, bg=PAPER, padx=24, pady=20,
-    highlightbackground="#E1DCD3", highlightthickness=1
-)
-card.pack(fill="both", expand=True, pady=(12, 18))
-label(card, "THE SETUP", 9, ACCENT)
-setup_label = label(card, "Something to smile about.", 21)
-tk.Frame(card, bg="#E1DCD3", height=1).pack(fill="x", pady=14)
-label(card, "THE PUNCHLINE", 9, MUTED)
-answer_label = label(card, "Ask Jarvis for a joke to get started.", 16, MUTED)
+def read_jokes(path):
+    pairs = []
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        setup, sep, answer = line.strip().partition("?")
+        if sep and setup.strip() and answer.strip():
+            pairs.append((setup.strip() + "?", answer.strip()))
+    return list(dict.fromkeys(pairs))
 
-start_button = button(body, "Jarvis tell me a Joke", nextJoke)
-start_button.pack(fill="x", pady=5)
 
-actions = tk.Frame(body, bg=BG)
-actions.pack(fill="x", pady=5)
-reveal_button = button(actions, "Show Punchline", reveal)
-reveal_button.pack(side="left", fill="x", expand=True, padx=(0, 5))
-reveal_button.config(state="disabled")
-next_button = button(actions, "Next Joke", nextJoke)
-next_button.pack(side="left", fill="x", expand=True, padx=(5, 0))
+class Press:
+    def __init__(self, root):
+        self.root = root
+        root.title("Second Impression  ·  The joke press")
+        root.resizable(False, False)
+        self.c = tk.Canvas(root, width=900, height=550, bg=DESK, highlightthickness=0)
+        self.c.pack()
+        self.art = {p.stem: tk.PhotoImage(file=str(p)) for p in (HERE/"ink").glob("*.png")}
+        root.iconphoto(True, self.art["mark"])
+        try:
+            self.jokes = read_jokes(HERE/"randomJokes.txt")
+        except (OSError, UnicodeError):
+            self.jokes = []
+        try:
+            saved = json.loads(ZINE.read_text(encoding="utf-8"))
+            self.saved = []
+            for pair in saved if isinstance(saved, list) else []:
+                if isinstance(pair, list) and len(pair)==2 and all(isinstance(v,str) for v in pair):
+                    if tuple(pair) not in self.saved:
+                        self.saved.append(tuple(pair))
+        except (OSError, ValueError):
+            self.saved = []
+        self.deck, self.current, self.turn = [], None, 0
+        self.revealed, self.mute, self.timer = False, False, None
+        self.page = None
+        self.notice = ""
+        self.draw()
+        root.bind("<Return>", lambda _: self.reveal())
+        root.bind("n", lambda _: self.next() if self.page is None else None)
+        root.bind("<Escape>", lambda _: self.view(None))
 
-tools = tk.Frame(body, bg=BG)
-tools.pack(fill="x", pady=5)
-save_button = button(tools, "Save favourite", saveFavourite)
-save_button.pack(side="left")
-copy_button = button(tools, "Copy joke", copyJoke)
-copy_button.pack(side="left", padx=8)
-copy_button.config(state="disabled")
-button(tools, "Quit", root.destroy).pack(side="right")
-status = label(body, "", 10, MUTED)
+    def text(self,x,y,s,size=15,color=INK,face="Georgia",**kw):
+        return self.c.create_text(x,y,text=s,anchor="nw",fill=color,font=(face,-size),**kw)
 
-readJokes()
-updateControls()
-if not jokes:
-    setup_label.config(text="The joke file could not be loaded.")
-    answer_label.config(
-        text="Place a UTF-8 randomJokes.txt file beside this program, then restart."
-    )
-    start_button.config(state="disabled")
-    next_button.config(state="disabled")
+    def button(self,x,y,w,h,s,fn,colour=INK):
+        b=tk.Button(self.c,text=s,command=fn,font=("Segoe UI",-14,"bold"),relief="flat",
+                    bd=0,bg=colour,fg=PAPER,activebackground="#505465",activeforeground="white",cursor="hand2")
+        self.c.create_window(x,y,anchor="nw",width=w,height=h,window=b)
+        return b
 
-root.mainloop()
+    def image(self,x,y,key):
+        self.c.create_image(x,y,image=self.art[key],anchor="nw")
+
+    def sound(self,key):
+        if not self.mute and winsound:
+            try:
+                winsound.PlaySound(str(HERE/"ink"/(key+".wav")),winsound.SND_FILENAME|winsound.SND_ASYNC)
+            except RuntimeError:
+                pass
+
+    def view(self,page):
+        if self.timer:
+            self.root.after_cancel(self.timer)
+            self.timer=None
+        self.page, self.notice = page, ""
+        self.draw()
+
+    def next(self):
+        if not self.jokes or self.page is not None:
+            return
+        if not self.deck:
+            self.deck=self.jokes.copy()
+            random.shuffle(self.deck)
+            if len(self.deck)>1 and self.deck[-1]==self.current:
+                self.deck[0],self.deck[-1]=self.deck[-1],self.deck[0]
+        self.current=self.deck.pop()
+        self.turn+=1
+        self.revealed=False
+        self.view(None)
+        self.sound("feed")
+        self.c.addtag_enclosed("sheet", 289, 65, 881, 535)
+        self.c.move("sheet", 0, -12)
+        def feed(steps):
+            self.c.move("sheet", 0, 3)
+            self.timer = self.root.after(16, feed, steps-1) if steps>1 else None
+        feed(4)
+
+    def reveal(self):
+        if not self.current or self.revealed or self.page is not None:
+            return
+        self.revealed=True
+        self.sound("impress")
+        self.draw()
+        # The moving mask exposes the second ink layer from top to bottom.
+        mask=self.c.create_rectangle(340,309,842,444,fill=PAPER,outline="")
+        roller=self.c.create_line(332,309,834,309,fill=RED,width=3)
+        def roll(y):
+            self.c.coords(roller,332,y,834,y)
+            self.c.coords(mask,340,y,842,444)
+            if y<444:
+                self.timer=self.root.after(16,roll,y+9)
+            else:
+                self.c.delete(mask,roller)
+                self.timer=None
+        roll(309)
+
+    def bookmark(self,joke):
+        updated=self.saved.copy()
+        if joke in updated: updated.remove(joke)
+        else: updated.append(joke)
+        try:
+            ZINE.parent.mkdir(parents=True,exist_ok=True)
+            tmp=ZINE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(updated,ensure_ascii=False),encoding="utf-8")
+            tmp.replace(ZINE)
+        except OSError:
+            self.notice="Couldn’t save your zine to disk."
+        else:
+            self.saved=updated
+            self.sound("clip")
+            self.notice="Clipped into your zine." if joke in updated else "Page removed."
+            if self.page is not None: self.page=max(0,min(self.page,len(updated)-1))
+        self.draw()
+
+    def copy(self,joke):
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append("\n".join(joke))
+            self.notice="Joke copied."
+        except tk.TclError:
+            self.notice="Clipboard unavailable."
+        self.draw()
+
+    def toggle(self):
+        self.mute=not self.mute
+        self.draw()
+
+    def draw(self):
+        if self.timer:
+            self.root.after_cancel(self.timer)
+            self.timer=None
+        self.c.delete("all")
+        for w in self.c.winfo_children(): w.destroy()
+        rect=self.c.create_rectangle
+        self.image(20,8,"mark")
+        self.text(72,21,"SECOND IMPRESSION",15,INK,"Bahnschrift")
+        self.button(626,12,105,32,f"My zine ({len(self.saved)})",lambda:self.view(0))
+        self.button(739,12,83,32,"Sound off" if self.mute else "Sound on",self.toggle)
+        self.button(830,12,50,32,"Quit",self.root.destroy)
+        self.c.create_line(21,57,879,57,fill=INK,width=2)
+        browsing=self.page is not None
+        joke=(self.saved[self.page] if self.saved else None) if browsing else self.current
+        printed=browsing or self.revealed
+        self.text(24,91,"THE POCKET ZINE" if browsing else "THE JOKE PRESS",14,RED,"Bahnschrift")
+        self.text(21,118,"Clipped\nprints." if browsing else "Second\nImpression.",43)
+        self.text(25,241,"A pocket edition of the jokes you kept." if browsing else
+                  "One joke, two inks.\nYou decide when the second colour lands.",18,width=238)
+        if browsing:
+            self.button(24,340,241,46,"←  Back to press",lambda:self.view(None))
+            for i in range(min(len(self.saved),24)):
+                x,y=26+(i%12)*18,449+(i//12)*10
+                rect(x,y,x+12,y+5,fill=(INK,RED)[i%2],outline="")
+            if self.saved:
+                for x,title,delta in [(24,"← Previous",-1),(150,"Next →",1)]:
+                    self.button(x,399,116,37,title,lambda d=delta:self.view((self.page+d)%len(self.saved)))
+        else:
+            start=self.button(24,338,241,46,"Next Joke" if joke else "Alexa tell me a Joke",self.next)
+            if not self.jokes: start.config(state="disabled")
+            reveal=self.button(24,395,241,46,"Show Punchline",self.reveal,RED)
+            if not joke or printed: reveal.config(state="disabled",disabledforeground="#ddc6b2")
+        self.text(25,489,self.notice or (f"{len(self.saved)} saved prints" if browsing else
+                  f"{len(self.jokes)} jokes in the press"),14,INK,"Segoe UI",width=248)
+        rect(301,81,874,524,fill="#acaa9f",outline="")
+        rect(295,75,868,518,fill=PAPER,outline="#c9bfa9")
+        number=(self.page+1 if self.saved else 0) if browsing else self.turn
+        self.text(325,99,f'{"ZINE PAGE" if browsing else "PRESS SHEET"}   /   {number:03}',14,INK,"Bahnschrift")
+        kind="press"
+        if joke:
+            for word,art in [('boil a clown','pot'),('pizza','pizza'),('bike','bike'),('mushroom','fungi')]:
+                if word in joke[0].lower(): kind=art; break
+        self.image(662,86,kind+str(int(printed)))
+        title=joke[0] if joke else ("Your first issue starts here." if browsing else "Ready to roll.")
+        self.text(322,198,title,28 if len(title)<65 else 24,width=510)
+        self.c.create_line(326,293,835,293,fill="#b9ad97",dash=(4,4))
+        answer=joke[1] if joke and printed else ("Save a revealed joke to add a page." if browsing else
+               "Press Show Punchline for the second ink." if joke else
+               "Ask for a joke to load the first sheet." if self.jokes else "Check randomJokes.txt beside the program.")
+        self.text(324,324,answer,27 if joke and printed else 18,RED if printed else INK,width=505)
+        if joke and printed:
+            self.button(325,449,165,35,"Unclip favourite" if joke in self.saved else "Save favourite",
+                        lambda:self.bookmark(joke))
+            self.button(499,449,110,35,"Copy joke",lambda:self.copy(joke))
+        self.c.create_line(325,495,836,495,fill=INK)
+        for i,col in enumerate((INK,RED)): rect(800+i*20,98,815+i*20,109,fill=col,outline="")
+
+
+if __name__=="__main__":
+    root=tk.Tk()
+    Press(root)
+    root.mainloop()

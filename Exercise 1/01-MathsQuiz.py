@@ -1,4 +1,5 @@
 """Floor Zero: a ten-guest arithmetic game. Run with Python 3 and Tkinter."""
+import ctypes
 import math
 import random
 import tkinter as tk
@@ -47,6 +48,15 @@ class Hotel:
         self.c.pack()
         self.art = {p.stem: tk.PhotoImage(file=str(p)) for p in ASSETS.glob("*.png")}
         self.best, self.muted = {}, False
+        root.iconphoto(True, self.art["crest"])
+        if winsound:
+            root.iconbitmap(str(ASSETS / "hotel.ico"))
+        self.music_on = True
+        self.player = ctypes.windll.winmm.mciSendStringW if winsound else None
+        if self.player and self.player(f'open "{ASSETS / "lounge.wav"}" type waveaudio alias hotelradio', None, 0, 0):
+            self.player = None
+        root.bind("<Destroy>", lambda e: self.radio("close hotelradio") if e.widget is root else None)
+        self.loop_music()
         self.home()
 
     def text(self, x, y, value, size=15, color=IVORY, face="Georgia", **opts):
@@ -60,6 +70,10 @@ class Hotel:
         b = tk.Button(self.c, text=title, command=action, bg=color, fg=IVORY, bd=0,
                       activebackground="#685540", activeforeground=IVORY, cursor="hand2",
                       font=("Segoe UI", -15, "bold"), relief="flat", highlightthickness=0)
+        if len(title) == 1:
+            b.config(image=self.art["keycap"], compound="center", fg=GOLD)
+        b.bind("<Enter>", lambda _: b.config(bg="#655a43"))
+        b.bind("<Leave>", lambda _: b.config(bg=color))
         self.c.create_window(x, y, window=b, anchor="nw", width=w, height=h)
         return b
 
@@ -80,23 +94,54 @@ class Hotel:
         elif name in ("bell", "finish"):
             self.root.bell()
 
+    def radio(self, command):
+        if self.player:
+            result = ctypes.create_unicode_buffer(64)
+            self.player(command, result, len(result), 0)
+            return result.value
+
+    def mix(self):
+        if not self.player:
+            return
+        mode = self.radio("status hotelradio mode")
+        if self.muted or not self.music_on:
+            if mode == "playing":
+                self.radio("pause hotelradio")
+        elif mode in ("stopped", "paused"):
+            self.radio("resume hotelradio" if mode == "paused" else "play hotelradio from 0")
+
+    def loop_music(self):
+        if self.player:
+            self.mix()
+            self.root.after(300, self.loop_music)
+
     def audio(self):
-        def toggle():
-            self.muted = not self.muted
-            switch.config(text="Sound off" if self.muted else "Sound on")
-            self.sound("key")
-        switch = self.button(795, 12, 92, 28, "Sound off" if self.muted else "Sound on", toggle)
+        def toggle(music):
+            if music:
+                self.music_on = not self.music_on
+                radio.config(text="Radio on" if self.music_on else "Radio off")
+            else:
+                self.muted = not self.muted
+                master.config(text="Sound off" if self.muted else "Sound on")
+                if winsound and self.muted:
+                    winsound.PlaySound(None, 0)
+            self.mix()
+        master = self.button(802, 12, 82, 28, "Sound off" if self.muted else "Sound on", lambda: toggle(False))
+        if self.player:
+            radio = self.button(712, 12, 84, 28, "Radio on" if self.music_on else "Radio off", lambda: toggle(True))
 
     def home(self):
         self.clear()
         self.image(0, 0, "title")
+        self.text(40, 507, "Radio  ·  Local Forecast – Elevator / Kevin MacLeod", 12, GOLD, "Segoe UI")
         self.button(36, 435, 200, 48, "Enter the hotel   →", self.displayMenu, WINE)
         self.root.bind("<Return>", lambda _: self.displayMenu())
         self.audio()
 
     def displayMenu(self):
         self.clear()
-        self.text(35, 35, "F L O O R   Z E R O", 14, GOLD, "Bahnschrift")
+        self.image(33, 22, "crest")
+        self.text(95, 39, "F L O O R   Z E R O", 14, GOLD, "Bahnschrift")
         self.text(32, 80, "Choose your shift", 48)
         self.text(35, 153, "Guide ten guests. A first-stop arrival earns 10 points. A second stop earns 5.", 17)
         for i, (level, room) in enumerate(zip(LEVELS, (0, 2, 9))):
@@ -128,6 +173,7 @@ class Hotel:
         self.room = self.image(125, 114, 10)
         self.doors = [self.image(x, 114, side) for x, side in [(125,"left"), (238,"right")]]
         self.image(0, 0, "wall")
+        self.image(480, 0, "console")
         self.needle = self.c.create_line(239, 94, 239, 29, fill="#f4cb80", width=3)
         self.indicator = self.c.create_text(240, 526, fill=GOLD, font=("Consolas", -20))
         self.dial(a)
@@ -145,10 +191,18 @@ class Hotel:
             self.button(505+(i%3)*76, 320+(i//3)*37, 71, 33, symbol, lambda s=symbol: self.key(s))
         self.points = self.text(743, 327, f"{sum(self.scores)} / 100", 21, GOLD)
         self.text(743, 360, "SHIFT SCORE", 12, GOLD, "Bahnschrift")
+        self.lamps()
         self.feedback = self.text(505, 475, "Enter a floor number or use the keypad.", 17, IVORY, "Segoe UI", width=370)
         self.entry.focus_set()
         self.root.bind("<Return>", lambda _: self.dispatch())
         self.audio()
+
+    def lamps(self):
+        self.c.delete("lamp")
+        for i in range(10):
+            x, y = 746 + (i % 5)*22, 402 + (i//5)*20
+            fill = {10: GOLD, 5: "#86ad9b", 0: "#bc6b5e"}[self.scores[i]] if i < len(self.scores) else PANEL
+            self.c.create_oval(x, y, x+10, y+10, fill=fill, outline="#91866b", tags="lamp")
 
     def key(self, symbol):
         if self.state != "answer":
@@ -220,6 +274,7 @@ class Hotel:
         else:
             points = (10 if self.take == 1 else 5) if correct else 0
             self.scores.append(points)
+            self.lamps()
             self.state = "next"
             room = GUESTS[self.guest][2]
             message = f"{room}. Guest delivered!  +{points}" if correct else f"Missed stop. {room} was on floor {self.target}."
@@ -234,6 +289,7 @@ class Hotel:
         grade = next(g for mark,g in [(91,"A+"),(80,"A"),(70,"B"),(60,"C"),(50,"D"),(0,"F")] if score >= mark)
         self.image(125, 114, 11)
         self.image(0, 0, "wall")
+        self.image(480, 0, "console")
         self.text(507, 75, "H O T E L   R E G I S T E R", 14, GOLD, "Bahnschrift")
         self.text(505, 116, "Shift complete", 43)
         self.text(507, 200, f"{score} / 100", 47, GOLD)

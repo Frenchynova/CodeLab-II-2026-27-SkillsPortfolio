@@ -1,2 +1,9 @@
-Floor Zero uses original AI-generated hotel, lift, and destination illustrations, and locally synthesized sounds. The title card also incorporates a duotone crop of the archival Paris Opera exterior photograph:
-https://commons.wikimedia.org/wiki/File:Paris,_l%27Op%C3%A9ra,_Acad%C3%A9mie_nationale_de_musique.jpg
+Floor Zero — music and art credits
+
+“Local Forecast - Elevator” by Kevin MacLeod (incompetech.com).
+Licensed under Creative Commons Attribution 4.0 International.
+https://creativecommons.org/licenses/by/4.0/
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1300012
+The full recording has been converted to mono PCM and lowered in volume for background playback.
+
+Lobby, lift and destination scenes are original AI-generated imagery. The hotel monogram, interface and sound cues were created for Floor Zero.

@@ -10,7 +10,7 @@ except ImportError:
     winsound = None
 
 HERE = Path(__file__).resolve().parent
-INK, RED, PAPER, DESK = "#223761", "#a83d32", "#faf2dc", "#dedbcf"
+INK, RED, PAPER, DESK = "#262820", "#973827", "#fbf2dd", "#e6e0d1"
 ZINE = Path.home() / ".second-impression" / "zine.json"
 
 
@@ -26,7 +26,7 @@ def read_jokes(path):
 class Press:
     def __init__(self, root):
         self.root = root
-        root.title("Second Impression  ·  The joke press")
+        root.title("Ink Dog Press  ·  Second Impression")
         root.resizable(False, False)
         self.c = tk.Canvas(root, width=900, height=550, bg=DESK, highlightthickness=0)
         self.c.pack()
@@ -93,10 +93,12 @@ class Press:
         self.revealed=False
         self.view(None)
         self.sound("feed")
-        self.c.addtag_enclosed("sheet", 289, 65, 881, 535)
-        self.c.move("sheet", 0, -12)
+        self.c.addtag_enclosed("sheet", 324, 65, 879, 513)
+        self.c.move("sheet", 12, 0)
+        self.c.move("dog", 8, 0)
         def feed(steps):
-            self.c.move("sheet", 0, 3)
+            self.c.move("sheet", -3, 0)
+            self.c.move("dog", -2, 0)
             self.timer = self.root.after(16, feed, steps-1) if steps>1 else None
         feed(4)
 
@@ -107,11 +109,11 @@ class Press:
         self.sound("impress")
         self.draw()
         # The moving mask exposes the second ink layer from top to bottom.
-        mask=self.c.create_rectangle(340,309,842,444,fill=PAPER,outline="")
+        mask=self.c.create_rectangle(329,309,864,444,fill=PAPER,outline="")
         roller=self.c.create_line(332,309,834,309,fill=RED,width=3)
         def roll(y):
             self.c.coords(roller,332,y,834,y)
-            self.c.coords(mask,340,y,842,444)
+            self.c.coords(mask,329,y,864,444)
             if y<444:
                 self.timer=self.root.after(16,roll,y+9)
             else:
@@ -157,19 +159,17 @@ class Press:
         self.c.delete("all")
         for w in self.c.winfo_children(): w.destroy()
         rect=self.c.create_rectangle
-        self.image(20,8,"mark")
-        self.text(72,21,"SECOND IMPRESSION",15,INK,"Bahnschrift")
+        self.image(0,0,"workbench")
+        self.text(310,17,"Second Impression",25,INK,"Georgia")
         self.button(626,12,105,32,f"My zine ({len(self.saved)})",lambda:self.view(0))
         self.button(739,12,83,32,"Sound off" if self.mute else "Sound on",self.toggle)
         self.button(830,12,50,32,"Quit",self.root.destroy)
-        self.c.create_line(21,57,879,57,fill=INK,width=2)
+        self.c.create_line(310,54,876,54,fill=INK,width=1)
         browsing=self.page is not None
         joke=(self.saved[self.page] if self.saved else None) if browsing else self.current
         printed=browsing or self.revealed
-        self.text(24,91,"THE POCKET ZINE" if browsing else "THE JOKE PRESS",14,RED,"Bahnschrift")
-        self.text(21,118,"Clipped\nprints." if browsing else "Second\nImpression.",43)
-        self.text(25,241,"A pocket edition of the jokes you kept." if browsing else
-                  "One joke, two inks.\nYou decide when the second colour lands.",18,width=238)
+        self.c.create_image(2,151,image=self.art["dog"+str(int(printed))],anchor="nw",tags="dog")
+        self.text(21,307,"Your clippings" if browsing else "Fetch a joke.",22,INK,"Georgia")
         if browsing:
             self.button(24,340,241,46,"←  Back to press",lambda:self.view(None))
             for i in range(min(len(self.saved),24)):
@@ -184,29 +184,27 @@ class Press:
             reveal=self.button(24,395,241,46,"Show Punchline",self.reveal,RED)
             if not joke or printed: reveal.config(state="disabled",disabledforeground="#ddc6b2")
         self.text(25,489,self.notice or (f"{len(self.saved)} saved prints" if browsing else
-                  f"{len(self.jokes)} jokes in the press"),14,INK,"Segoe UI",width=248)
-        rect(301,81,874,524,fill="#acaa9f",outline="")
-        rect(295,75,868,518,fill=PAPER,outline="#c9bfa9")
+                  f"{len(self.jokes)} jokes in the drawer"),15,INK,"Consolas",width=248)
         number=(self.page+1 if self.saved else 0) if browsing else self.turn
-        self.text(325,99,f'{"ZINE PAGE" if browsing else "PRESS SHEET"}   /   {number:03}',14,INK,"Bahnschrift")
+        self.text(342,91,f'{"ZINE PAGE" if browsing else "PRESS SHEET"}   /   {number:03}',14,INK,"Consolas")
         kind="press"
         if joke:
             for word,art in [('boil a clown','pot'),('pizza','pizza'),('bike','bike'),('mushroom','fungi')]:
                 if word in joke[0].lower(): kind=art; break
-        self.image(662,86,kind+str(int(printed)))
-        title=joke[0] if joke else ("Your first issue starts here." if browsing else "Ready to roll.")
-        self.text(322,198,title,28 if len(title)<65 else 24,width=510)
-        self.c.create_line(326,293,835,293,fill="#b9ad97",dash=(4,4))
+        self.image(669,63,kind+str(int(printed)))
+        title=joke[0] if joke else ("Your first issue starts here." if browsing else "The dog has the paper.")
+        self.text(339,186,title,34 if len(title)<50 else 26,width=514)
+        self.c.create_line(340,293,848,293,fill="#b9ad97",dash=(4,4))
         answer=joke[1] if joke and printed else ("Save a revealed joke to add a page." if browsing else
                "Press Show Punchline for the second ink." if joke else
                "Ask for a joke to load the first sheet." if self.jokes else "Check randomJokes.txt beside the program.")
-        self.text(324,324,answer,27 if joke and printed else 18,RED if printed else INK,width=505)
+        self.text(338,324,answer,30 if joke and printed else 18,RED if printed else INK,width=505)
         if joke and printed:
-            self.button(325,449,165,35,"Unclip favourite" if joke in self.saved else "Save favourite",
+            self.button(339,449,165,35,"Unclip favourite" if joke in self.saved else "Save favourite",
                         lambda:self.bookmark(joke))
-            self.button(499,449,110,35,"Copy joke",lambda:self.copy(joke))
-        self.c.create_line(325,495,836,495,fill=INK)
-        for i,col in enumerate((INK,RED)): rect(800+i*20,98,815+i*20,109,fill=col,outline="")
+            self.button(513,449,110,35,"Copy joke",lambda:self.copy(joke))
+        self.c.create_line(340,497,847,497,fill=INK)
+
 
 
 if __name__=="__main__":

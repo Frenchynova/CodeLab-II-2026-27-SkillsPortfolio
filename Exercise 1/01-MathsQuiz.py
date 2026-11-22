@@ -1,4 +1,3 @@
-"""Floor Zero: a ten-guest arithmetic game. Run with Python 3 and Tkinter."""
 import ctypes
 import math
 import random

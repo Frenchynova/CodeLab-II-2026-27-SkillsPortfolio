@@ -1,4 +1,3 @@
-"""Second Impression — a two-colour joke press. Python 3 + Tkinter."""
 import json
 import random
 import tkinter as tk

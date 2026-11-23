@@ -91,7 +91,7 @@ class StudentManager:
     def reload(self):
         try:
             self.students = load_students(self.folder)
-            # If TXT was missing, restore it from the validated JSON copy.
+           
             if not (self.folder / "studentMarks.txt").exists():
                 warning = save_students(self.students, self.folder)
             else:

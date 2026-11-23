@@ -2,7 +2,7 @@
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
-from student_data import FOLDER, validate_students, load_students, results, save_students, sync_json
+from student_data import FOLDER, GRADE_BANDS, validate_marks, validate_students, load_students, results, save_students, sync_json
 
 BG, WHITE, INK = "#f1ecdf", "#fffaf0", "#202d3a"
 BLUE, MUTED, LINE = "#784135", "#545d60", "#d3cbbb"
@@ -11,8 +11,7 @@ BLUE, MUTED, LINE = "#784135", "#545d60", "#d3cbbb"
 class StudentManager:
     def __init__(self, root, folder=FOLDER):
         self.root, self.folder = root, Path(folder)
-        self.students, self.loaded = [], False
-        self.filter = "all"
+        self.marks_path = self.folder / "studentMarks.txt"
         self.sort_key, self.descending = "number", False
         self.query = tk.StringVar()
         root.title("Class Ledger · Student Manager")
@@ -54,7 +53,7 @@ class StudentManager:
         margin.pack_propagate(False)
         self.label(margin, "Grade index", 16, WHITE).pack(anchor="w")
         self.bands = {}
-        for grade in "ABCDF":
+        for grade, _ in GRADE_BANDS:
             btn = self.button(margin, grade, lambda g=grade: self.set_filter(g), False)
             btn.configure(anchor="w", font=("Consolas", -14), padx=8, pady=1)
             btn.pack(fill="x", pady=(3, 0))
@@ -92,9 +91,9 @@ class StudentManager:
         self.status.pack(anchor="w")
         self.reload()
 
-    def label(self, parent, text, size=11, color=INK, bold=False):
+    def label(self, parent, text, size=11, color=INK, bold=False, **options):
         return tk.Label(parent, text=text, bg=parent["bg"], fg=color,
-                        font=("Palatino Linotype" if size >= 15 else "Segoe UI", size, "bold" if bold else "normal"))
+                        font=("Palatino Linotype" if size >= 15 else "Segoe UI", size, "bold" if bold else "normal"), **options)
 
     def button(self, parent, text, command, primary=True):
         return tk.Button(parent, text=text, command=command, bg=BLUE if primary else "#E5E3D8",
@@ -104,7 +103,7 @@ class StudentManager:
         try:
             self.students = load_students(self.folder)
            
-            if not (self.folder / "studentMarks.txt").exists():
+            if not self.marks_path.exists():
                 warning = save_students(self.students, self.folder)
             else:
                 warning = "TXT and JSON are up to date."
@@ -112,7 +111,7 @@ class StudentManager:
                     sync_json(self.students, self.folder)
                 except OSError:
                     warning = "Records loaded; JSON could not be updated. Check folder permissions."
-            self.source_bytes = (self.folder / "studentMarks.txt").read_bytes()
+            self.source_bytes = self.marks_path.read_bytes()
             self.loaded = True
         except (OSError, ValueError, UnicodeError) as error:
             self.students, self.loaded = [], False
@@ -129,6 +128,7 @@ class StudentManager:
         self.refresh()
 
     def refresh(self):
+        # Summarise the whole class before narrowing the rows shown in the table.
         rows = [results(s) for s in self.students]
         percentages = [s["percentage"] for s in rows]
         average = f"{sum(percentages)/len(rows):.1f}%" if rows else "—"
@@ -145,12 +145,12 @@ class StudentManager:
             query = self.query.get().strip().casefold()
             rows = [s for s in rows if query in s["name"].casefold() or query == str(s["number"])]
         elif rows and self.filter in ("highest", "lowest"):
+            # Compare every total with the extreme so tied students appear together.
             target = (max if self.filter == "highest" else min)(s["total"] for s in rows)
             rows = [s for s in rows if s["total"] == target]
         rows.sort(key=lambda s: s[self.sort_key].casefold() if isinstance(s[self.sort_key], str)
                   else s[self.sort_key], reverse=self.descending)
-        for item in self.table.get_children():
-            self.table.delete(item)
+        self.table.delete(*self.table.get_children())
         for index, s in enumerate(rows):
             self.table.insert("", "end", iid=str(s["number"]), values=(s["number"], s["name"],
                               s["coursework_total"], s["exam"], f'{s["percentage"]:.2f}%', s["grade"]),
@@ -165,10 +165,10 @@ class StudentManager:
         self.annotate()
 
     def annotate(self, event=None):
-        selected = self.table.selection()
-        s = next((results(s) for s in self.students if selected and str(s["number"]) == selected[0]), None)
-        if s:
-            gap = next((mark - s["total"] for mark in (64, 80, 96, 112) if mark > s["total"]), 0)
+        student = self.selected(prompt=False)
+        if student:
+            s = results(student)
+            gap = s["gap"]
             detail = f"{gap} more mark{'s' if gap != 1 else ''} to the next grade." if gap else "Top grade band."
             marks = " + ".join(map(str, s["coursework"]))
             note = f"{s['name']}\nCoursework {marks}\nExam {s['exam']}/100\n{detail}"
@@ -181,11 +181,12 @@ class StudentManager:
         self.sort_key = key
         self.refresh()
 
-    def selected(self):
+    def selected(self, prompt=True):
         selection = self.table.selection()
         if selection:
-            return next(s for s in self.students if s["number"] == int(selection[0]))
-        messagebox.showinfo("Select a student", "Click a student in the table first.", parent=self.root)
+            return next((s for s in self.students if s["number"] == int(selection[0])), None)
+        if prompt:
+            messagebox.showinfo("Select a student", "Click a student in the table first.", parent=self.root)
 
     def view_selected(self):
         student = self.selected()
@@ -202,14 +203,15 @@ class StudentManager:
 
     def commit(self, candidates):
         try:
-            if (self.folder / "studentMarks.txt").read_bytes() != self.source_bytes:
+            # If another editor changed the register, ask for a reload before saving.
+            if self.marks_path.read_bytes() != self.source_bytes:
                 raise ValueError("The TXT file changed outside the app. Reload files before editing.")
             message = save_students(candidates, self.folder)
         except (OSError, ValueError) as error:
             messagebox.showerror("Not saved", str(error), parent=self.root)
             return False
         self.students = candidates
-        self.source_bytes = (self.folder / "studentMarks.txt").read_bytes()
+        self.source_bytes = self.marks_path.read_bytes()
         self.set_filter("all")
         self.status.configure(text=message)
         if message.startswith("TXT saved,"):
@@ -222,29 +224,54 @@ class StudentManager:
         student = self.selected() if existing else None
         if existing and student is None:
             return
-        dialog = tk.Toplevel(self.root)
+        dialog = tk.Toplevel(self.root, bg=WHITE, padx=26, pady=22)
         dialog.title("Edit student" if existing else "Add student")
-        dialog.configure(bg=WHITE, padx=26, pady=22)
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
         values = [student["number"], student["name"], *student["coursework"], student["exam"]] if existing else [""] * 6
         labels = ["Student number (1000–9999)", "Full name", "Coursework 1 /20", "Coursework 2 /20", "Coursework 3 /20", "Exam /100"]
+        fields = [tk.StringVar(dialog, value=v) for v in values]
         entries = []
-        for row, (title, value) in enumerate(zip(labels, values)):
+        for row, title in enumerate(labels):
             self.label(dialog, title).grid(row=row, column=0, sticky="w", padx=(0, 20), pady=9)
-            entry = ttk.Entry(dialog, font=("Segoe UI", 12), width=27)
-            entry.insert(0, str(value))
+            entry = ttk.Entry(dialog, textvariable=fields[row], font=("Segoe UI", 12), width=27)
             entry.grid(row=row, column=1, pady=9)
             entries.append(entry)
-        error_label = self.label(dialog, "", 10, "#AB4037")
-        error_label.configure(wraplength=470)
-        error_label.grid(row=6, column=0, columnspan=2, sticky="w", pady=10)
+        def marks_from_form():
+            try:
+                marks = [int(field.get()) for field in fields[2:]]
+            except ValueError:
+                raise ValueError("Enter whole numbers for all four marks.") from None
+            coursework, exam = marks[:3], marks[3]
+            validate_marks(coursework, exam)
+            return dict(coursework=coursework, exam=exam)
+
+        def summary(record):
+            s = results(record)
+            return f"{s['total']}/160  ·  {s['percentage']:.2f}%  ·  Grade {s['grade']}"
+
+        # Typing updates only the preview. Save still checks the complete class
+        # (including duplicate numbers) before replacing either data file.
+        preview = self.label(dialog, "", 11, BLUE, justify="left")
+        preview.grid(row=6, column=0, columnspan=2, sticky="w")
+        def update_preview(*_):
+            before = f"Saved     {summary(student)}\n" if existing else ""
+            try:
+                after = summary(marks_from_form())
+            except ValueError as error:
+                after = str(error)
+            preview.configure(text=before + "Preview   " + after)
+
+        for field in fields[2:]:
+            field.trace_add("write", update_preview)
+        update_preview()
+        error_label = self.label(dialog, "", 10, "#AB4037", wraplength=470)
+        error_label.grid(row=7, column=0, columnspan=2, sticky="w", pady=10)
 
         def submit():
             try:
-                raw = [entry.get().strip() for entry in entries]
-                replacement = dict(number=int(raw[0]), name=raw[1], coursework=[int(v) for v in raw[2:5]], exam=int(raw[5]))
+                replacement = dict(number=int(fields[0].get()), name=fields[1].get().strip(), **marks_from_form())
                 candidates = [replacement if s is student else s for s in self.students] if existing else self.students + [replacement]
                 validate_students(candidates)
             except ValueError as error:
@@ -252,8 +279,8 @@ class StudentManager:
                 return
             if self.commit(candidates):
                 dialog.destroy()
-        self.button(dialog, "Cancel", dialog.destroy, False).grid(row=7, column=0, sticky="w")
-        self.button(dialog, "Save student", submit).grid(row=7, column=1, sticky="e")
+        self.button(dialog, "Cancel", dialog.destroy, False).grid(row=8, column=0, sticky="w")
+        self.button(dialog, "Save student", submit).grid(row=8, column=1, sticky="e")
         entries[0].focus_set()
 
     def delete(self):

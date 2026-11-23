@@ -2,6 +2,7 @@
 # destination, watches the lift travel, then gets feedback when the doors open.
 import ctypes
 import math
+from contextlib import suppress
 import random
 import tkinter as tk
 from pathlib import Path
@@ -128,10 +129,8 @@ class Hotel:
         if self.muted:
             return
         if winsound:
-            try:
+            with suppress(RuntimeError):
                 winsound.PlaySound(str(ASSETS / (name + ".wav")), winsound.SND_FILENAME | winsound.SND_ASYNC)
-            except RuntimeError:
-                pass
         elif name in ("bell", "finish"):
             self.root.bell()
 
@@ -144,8 +143,6 @@ class Hotel:
             return result.value
 
     def mix(self):
-        if not self.player:
-            return
         # Master mute silences everything. The radio switch controls just the music.
         # A paused track can resume in place, while a finished track starts over.
         mode = self.radio("status hotelradio mode")
@@ -348,8 +345,7 @@ class Hotel:
         # Between ticks 5 and 15, progress goes from 0 to 1. Halfway through a ride
         # from 4 to -2, the counter shows 1, halfway between those two floors.
         progress = min(1, max(0, (tick-5)/10))
-        shown = round(self.floor + (floor-self.floor)*progress)
-        self.dial(shown)
+        self.dial(round(self.floor + (floor-self.floor)*progress))
         # Swap the scenery while both doors are shut. A correct stop reveals the
         # guest's room. Any other stop reveals the ordinary corridor (image 10).
         if tick == 6:
@@ -368,11 +364,9 @@ class Hotel:
         self.sound("bell" if points else "miss")
         # Both kinds of miss open a warning. After OK, None gives the guest a
         # second try; zero completes the trip and goes on the receipt.
+        self.c.itemconfig(self.feedback, text=message if points else "")
         if not points:
-            self.c.itemconfig(self.feedback, text="")
             messagebox.showwarning("Wrong floor", message, parent=self.root)
-        else:
-            self.c.itemconfig(self.feedback, text=message)
         self.go.config(state="normal")
         if points is None:
             self.state, self.take = "answer", 2

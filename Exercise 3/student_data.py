@@ -7,6 +7,21 @@ from pathlib import Path
 
 FOLDER = Path(__file__).resolve().parent
 
+# Three assignments contribute 60 marks and the exam contributes 100.
+# These are the minimum marks for 70%, 60%, 50%, 40% and below.
+MAX_TOTAL = 160
+GRADE_BANDS = (("A", 112), ("B", 96), ("C", 80), ("D", 64), ("F", 0))
+
+
+def validate_marks(marks, exam):
+    if not isinstance(marks, list) or len(marks) != 3 or any(
+        type(mark) is not int or not 0 <= mark <= 20 for mark in marks
+    ):
+        raise ValueError("Enter three whole-number coursework marks from 0 to 20.")
+    if type(exam) is not int or not 0 <= exam <= 100:
+        raise ValueError("The exam mark must be a whole number from 0 to 100.")
+
+
 def validate_students(students):
     """Reject invalid records before they can replace the data files."""
     if not isinstance(students, list):
@@ -24,12 +39,7 @@ def validate_students(students):
         codes.add(code)
         if not isinstance(name, str) or not name.strip() or any(ord(c) < 32 for c in name):
             raise ValueError("Enter a name without blank lines or control characters.")
-        if not isinstance(marks, list) or len(marks) != 3 or any(
-            type(mark) is not int or not 0 <= mark <= 20 for mark in marks
-        ):
-            raise ValueError("Enter three whole-number coursework marks from 0 to 20.")
-        if type(exam) is not int or not 0 <= exam <= 100:
-            raise ValueError("The exam mark must be a whole number from 0 to 100.")
+        validate_marks(marks, exam)
 
 
 def load_students(folder=FOLDER):
@@ -40,6 +50,7 @@ def load_students(folder=FOLDER):
             rows = [row for row in csv.reader(file) if any(v.strip() for v in row)]
         if not rows or len(rows[0]) != 1:
             raise ValueError("The first line must contain the class size.")
+        # The first line is a count. Each remaining row supplies one student.
         count = int(rows[0][0])
         students = []
         for line, row in enumerate(rows[1:], 2):
@@ -61,10 +72,12 @@ def load_students(folder=FOLDER):
 def results(student):
     coursework = sum(student["coursework"])
     total = coursework + student["exam"]
-    percentage = total / 160 * 100
-    grade = next(g for minimum, g in [(70, "A"), (60, "B"), (50, "C"), (40, "D"), (0, "F")]
-                 if percentage >= minimum)
-    return dict(student, coursework_total=coursework, total=total, percentage=percentage, grade=grade)
+    # Find the current band first. The band immediately above it supplies the
+    # target in Record notes: 111 is a B and needs one more mark for an A.
+    index = next(i for i, (_, minimum) in enumerate(GRADE_BANDS) if total >= minimum)
+    gap = GRADE_BANDS[index - 1][1] - total if index else 0
+    return dict(student, coursework_total=coursework, total=total, percentage=100 * total / MAX_TOTAL,
+                grade=GRADE_BANDS[index][0], gap=gap)
 
 
 def atomic_write(path, content):
@@ -92,8 +105,7 @@ def save_students(students, folder=FOLDER):
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow([len(students)])
-    for s in students:
-        writer.writerow([s["number"], s["name"], *s["coursework"], s["exam"]])
+    writer.writerows((s["number"], s["name"], *s["coursework"], s["exam"]) for s in students)
     path = folder / "studentMarks.txt"
     if path.exists():
         atomic_write(folder / "studentMarks.txt.bak", path.read_text("utf-8-sig"))

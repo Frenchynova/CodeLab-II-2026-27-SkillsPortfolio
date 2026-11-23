@@ -1,6 +1,7 @@
 from html import escape
 from tkinter import filedialog
 import json
+from contextlib import suppress
 import random
 import tkinter as tk
 from pathlib import Path
@@ -48,26 +49,23 @@ class Press:
         self.c.pack()
         self.art = {p.stem: tk.PhotoImage(file=str(p)) for p in (HERE/"ink").glob("*.png")}
         root.iconphoto(True, self.art["mark"])
-        try:
+        self.jokes = []
+        with suppress(OSError, UnicodeError):
             self.jokes = read_jokes(HERE/"randomJokes.txt")
-        except (OSError, UnicodeError):
-            self.jokes = []
-        try:
+        self.saved = []
+        with suppress(OSError, ValueError):
             saved = json.loads(ZINE.read_text(encoding="utf-8"))
-            self.saved = []
-            for pair in saved if isinstance(saved, list) else []:
-                if isinstance(pair, list) and len(pair)==2 and all(isinstance(v,str) for v in pair):
-                    if tuple(pair) not in self.saved:
-                        self.saved.append(tuple(pair))
-        except (OSError, ValueError):
-            self.saved = []
+            if isinstance(saved, list):
+                pairs = (tuple(p) for p in saved if isinstance(p, list) and len(p) == 2
+                         and all(isinstance(part, str) for part in p))
+                self.saved = list(dict.fromkeys(pairs))
         self.deck, self.current, self.turn = [], None, 0
         self.revealed, self.mute, self.timer = False, False, None
         self.page = None
         self.notice = ""
         self.draw()
         root.bind("<Return>", lambda _: self.reveal())
-        root.bind("n", lambda _: self.next() if self.page is None else None)
+        root.bind("n", lambda _: self.next())
         root.bind("<Escape>", lambda _: self.view(None))
 
     def text(self,x,y,s,size=15,color=INK,face="Georgia",**kw):
@@ -84,15 +82,10 @@ class Press:
 
     def sound(self,key):
         if not self.mute and winsound:
-            try:
+            with suppress(RuntimeError):
                 winsound.PlaySound(str(HERE/"ink"/(key+".wav")),winsound.SND_FILENAME|winsound.SND_ASYNC)
-            except RuntimeError:
-                pass
 
     def view(self,page):
-        if self.timer:
-            self.root.after_cancel(self.timer)
-            self.timer=None
         self.page, self.notice = page, ""
         self.draw()
 

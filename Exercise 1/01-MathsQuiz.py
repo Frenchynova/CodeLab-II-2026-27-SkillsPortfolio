@@ -5,6 +5,9 @@ import math
 import random
 import tkinter as tk
 from pathlib import Path
+from typing import NamedTuple
+from tkinter import messagebox
+from tkinter.scrolledtext import ScrolledText
 
 try:
     import winsound
@@ -44,6 +47,26 @@ def decideOperation():
 
 def isCorrect(answer, destination):
     return answer == destination
+
+
+def assess_attempt(floor, target, take, room):
+    """Return points and feedback. None means the guest still has a retry."""
+    if isCorrect(floor, target):
+        points = 10 if take == 1 else 5
+        return points, f"{room}. Guest delivered!  +{points}"
+    if take == 1:
+        distance = target - floor
+        direction = "up" if distance > 0 else "down"
+        return None, f"Wrong landing. Go {direction} {abs(distance):,} more. Enter the new floor."
+    return 0, f"Missed stop. {room} was on floor {target}."
+
+
+class Stop(NamedTuple):
+    guest: str
+    equation: str
+    destination: int
+    guesses: tuple
+    points: int
 
 
 class Hotel:
@@ -176,8 +199,12 @@ class Hotel:
         self.button(35, 480, 128, 34, "←   Lobby", self.home)
         self.audio()
 
+    @property
+    def scores(self):
+        return [stop.points for stop in self.receipt]
+
     def start(self, level):
-        self.level, self.scores = level, []
+        self.level, self.receipt = level, []
         # Shuffle the ten guest numbers once per shift. Each guest appears exactly
         # once, even if the player needs two attempts to deliver them.
         self.guests = random.sample(range(10), 10)
@@ -194,6 +221,7 @@ class Hotel:
         # The first number is the starting floor and the second is the distance.
         # For 4 minus 6, the lift starts on floor 4 and the guest wants floor -2.
         self.target = a + b if op == "+" else a - b
+        self.equation, self.guesses = f"{a}  {op}  {b}", []
         self.floor, self.take, self.state = a, 1, "answer"
         # Canvas items stack in drawing order. Put the room behind the two doors,
         # then draw the wall over them so they disappear into it as they slide apart.
@@ -208,7 +236,7 @@ class Hotel:
         self.text(503, 69, name, 37)
         self.text(505, 121, f"“{quote}”", 18, IVORY, "Georgia", width=362)
         self.text(505, 188, "REQUEST   /   " + ("GO UP" if op == "+" else "GO DOWN"), 13, GOLD, "Bahnschrift")
-        self.text(504, 210, f"{a}  {op}  {b}  =", 34)
+        self.text(504, 210, f"{self.equation}  =", 34)
         # The entry and the on-screen keypad share this value. GO reads the same
         # answer whether the player types -2 or taps 2 and the sign-change key.
         self.number = tk.StringVar()
@@ -332,30 +360,28 @@ class Hotel:
 
     def arrive(self, floor):
         self.floor = floor
-        correct = isCorrect(floor, self.target)
-        self.sound("bell" if correct else "miss")
+        self.guesses.append(floor)
+        points, message = assess_attempt(floor, self.target, self.take, GUESTS[self.guest][2])
+        self.sound("bell" if points else "miss")
+        if not points:
+            self.c.itemconfig(self.feedback, text="")
+            messagebox.showwarning("Wrong floor", message, parent=self.root)
+        else:
+            self.c.itemconfig(self.feedback, text=message)
         self.go.config(state="normal")
-        if not correct and self.take == 1:
+        if points is None:
             self.state, self.take = "answer", 2
-            # The retry starts where the player landed, so the hint counts floors from here.
-            distance = self.target-floor
-            direction = "up" if distance > 0 else "down"
-            message = f"Wrong landing. Go {direction} {abs(distance):,} more. Enter the new floor."
             self.entry.config(state="normal")
             self.number.set("")
             self.entry.focus_set()
         else:
-            # Record a guest's score only when their trip is over. A first miss gets
-            # a retry above. A second miss records a zero and advances the shift.
-            points = (10 if self.take == 1 else 5) if correct else 0
-            self.scores.append(points)
+            # Keep valid stops in the order they happened, including a first miss.
+            self.receipt.append(Stop(GUESTS[self.guest][0], self.equation, self.target,
+                                     tuple(self.guesses), points))
             self.lamps()
             self.state = "next"
-            room = GUESTS[self.guest][2]
-            message = f"{room}. Guest delivered!  +{points}" if correct else f"Missed stop. {room} was on floor {self.target}."
             self.c.itemconfig(self.points, text=f"{sum(self.scores)} / 100")
             self.go.config(text="Finish shift" if len(self.scores)==10 else "Next guest   →")
-        self.c.itemconfig(self.feedback, text=message)
 
     def displayResults(self):
         self.clear()
@@ -372,10 +398,29 @@ class Hotel:
         self.text(507, 200, f"{score} / 100", 47, GOLD)
         self.text(507, 272, f"Grade {grade}    ·    {self.level} best {self.best[self.level]}/100", 19)
         self.text(507, 326, f"{self.scores.count(10)} first stops   ·   {self.scores.count(5)} second stops\n{self.scores.count(0)} missed destinations", 17)
+        self.button(507, 370, 309, 38, "Review shift receipt", self.show_receipt)
         self.button(507, 419, 178, 43, "Another shift", self.displayMenu, WINE)
         self.button(694, 419, 122, 43, "Lobby", self.home)
         self.audio()
         self.sound("finish")
+
+
+    def show_receipt(self):
+        window = tk.Toplevel(self.root)
+        window.title("Floor Zero · Shift receipt")
+        window.transient(self.root)
+        window.grab_set()
+        page = ScrolledText(window, width=58, height=20, padx=18, pady=14,
+                            bg=IVORY, fg=INK, font=("Consolas", 11), wrap="word")
+        page.pack(fill="both", expand=True)
+        page.insert("end", f"{self.level.upper()}   /   SHIFT RECEIPT   /   {sum(self.scores)}/100\n")
+        for i, stop in enumerate(self.receipt, 1):
+            guesses = " → ".join(map(str, stop.guesses))
+            page.insert("end", f"\n{i:02}  {stop.guest}   ·   {stop.points}/10\n"
+                        f"    {stop.equation} = {stop.destination}\n    Your stops: {guesses}\n")
+        page.config(state="disabled")
+        tk.Button(window, text="Back to results", command=window.destroy).pack(pady=6)
+        window.bind("<Escape>", lambda _: window.destroy())
 
 
 if __name__ == "__main__":

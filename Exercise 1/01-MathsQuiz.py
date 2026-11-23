@@ -1,3 +1,5 @@
+# Floor Zero turns each maths problem into a lift journey. The player enters a
+# destination, watches the lift travel, then gets feedback when the doors open.
 import ctypes
 import math
 import random
@@ -9,9 +11,13 @@ try:
 except ImportError:
     winsound = None
 
+# Find the artwork and audio beside this script, even when the game is launched
+# from a shortcut or from another folder.
 ASSETS = Path(__file__).resolve().with_name("rooms")
 INK, PANEL, GOLD, IVORY, WINE = "#191917", "#292923", "#dfbe86", "#faf0dc", "#893d35"
 LEVELS = {"Easy": (0, 9), "Moderate": (10, 99), "Advanced": (1000, 9999)}
+# Each entry holds a guest's name, request and destination. Its position also
+# matches the room image: the bather is guest 0, so the beach is 0.png.
 GUESTS = [
     ("The bather", "The tide is coming in. I brought my own tub.", "The underground beach"),
     ("The botanist", "My orchids only open after midnight.", "The night garden"),
@@ -27,6 +33,8 @@ GUESTS = [
 
 
 def randomInt(level):
+    # The two values for a level are the smallest and largest possible operands.
+    # randint includes both ends, so Easy can give either 0 or 9.
     return random.randint(*LEVELS[level])
 
 
@@ -80,6 +88,8 @@ class Hotel:
         return b
 
     def clear(self):
+        # Leaving mid-ride can happen between animation frames. Cancel the pending
+        # frame before removing the doors and floor display it would try to update.
         if self.ride_timer is not None:
             self.root.after_cancel(self.ride_timer)
             self.ride_timer = None
@@ -101,6 +111,8 @@ class Hotel:
 
     def radio(self, command):
         if self.player:
+            # Windows writes its reply into this buffer. A status request, for example,
+            # returns a word like 'playing' that mix() can use to decide what to do.
             result = ctypes.create_unicode_buffer(64)
             self.player(command, result, len(result), 0)
             return result.value
@@ -108,6 +120,8 @@ class Hotel:
     def mix(self):
         if not self.player:
             return
+        # Master mute silences everything. The radio switch controls just the music.
+        # A paused track can resume in place, while a finished track starts over.
         mode = self.radio("status hotelradio mode")
         if self.muted or not self.music_on:
             if mode == "playing":
@@ -164,6 +178,8 @@ class Hotel:
 
     def start(self, level):
         self.level, self.scores = level, []
+        # Shuffle the ten guest numbers once per shift. Each guest appears exactly
+        # once, even if the player needs two attempts to deliver them.
         self.guests = random.sample(range(10), 10)
         self.displayProblem()
 
@@ -175,8 +191,12 @@ class Hotel:
         self.guest = self.guests[len(self.scores)]
         name, quote, _ = GUESTS[self.guest]
         a, b, op = randomInt(self.level), randomInt(self.level), decideOperation()
+        # The first number is the starting floor and the second is the distance.
+        # For 4 minus 6, the lift starts on floor 4 and the guest wants floor -2.
         self.target = a + b if op == "+" else a - b
         self.floor, self.take, self.state = a, 1, "answer"
+        # Canvas items stack in drawing order. Put the room behind the two doors,
+        # then draw the wall over them so they disappear into it as they slide apart.
         self.room = self.image(125, 114, 10)
         self.doors = [self.image(x, 114, side) for x, side in [(125,"left"), (238,"right")]]
         self.image(0, 0, "wall")
@@ -189,6 +209,8 @@ class Hotel:
         self.text(505, 121, f"“{quote}”", 18, IVORY, "Georgia", width=362)
         self.text(505, 188, "REQUEST   /   " + ("GO UP" if op == "+" else "GO DOWN"), 13, GOLD, "Bahnschrift")
         self.text(504, 210, f"{a}  {op}  {b}  =", 34)
+        # The entry and the on-screen keypad share this value. GO reads the same
+        # answer whether the player types -2 or taps 2 and the sign-change key.
         self.number = tk.StringVar()
         self.entry = tk.Entry(self.c, textvariable=self.number, justify="center", bg="#fbf0d8",
                               fg=INK, font=("Consolas", -26), bd=0)
@@ -214,6 +236,8 @@ class Hotel:
         tk.Label(dialog, text="Your current shift score will be discarded.", bg=INK, fg=GOLD).pack(padx=25)
         row = tk.Frame(dialog, bg=INK)
         row.pack(pady=16)
+        # Keep playing closes only this dialog. Leaving calls home(), which clears
+        # the shift screen and cancels any lift animation still in progress.
         def leave():
             dialog.destroy()
             self.home()
@@ -225,6 +249,8 @@ class Hotel:
         x = self.root.winfo_rootx() + (900 - dialog.winfo_width()) // 2
         y = self.root.winfo_rooty() + (540 - dialog.winfo_height()) // 2
         dialog.geometry(f"{x:+d}{y:+d}")
+        # Send clicks to the dialog until the player chooses. Tkinter can still
+        # process timers, so a lift already in motion may arrive in the meantime.
         dialog.grab_set()
         keep.focus_set()
 
@@ -232,6 +258,8 @@ class Hotel:
         self.c.delete("lamp")
         for i in range(10):
             x, y = 746 + (i % 5)*22, 402 + (i//5)*20
+            # Each lamp represents one guest. Gold means first try, green means second
+            # try, and red means both attempts were missed. Future guests stay unlit.
             fill = {10: GOLD, 5: "#86ad9b", 0: "#bc6b5e"}[self.scores[i]] if i < len(self.scores) else PANEL
             self.c.create_oval(x, y, x+10, y+10, fill=fill, outline="#91866b", tags="lamp")
 
@@ -256,6 +284,8 @@ class Hotel:
         if self.state != "answer":
             return
         try:
+            # An empty entry or a decimal is an input mistake. Prompt again before
+            # starting a ride so it doesn't use up one of the guest's two attempts.
             floor = int(self.number.get())
             if abs(floor) > 99999:
                 raise ValueError
@@ -273,6 +303,8 @@ class Hotel:
         limit = 2 * LEVELS[self.level][1]
         # Large guesses can move the floor counter past the end of the dial. Clamp the needle to its arc.
         angle = math.radians(90 - 69 * max(-1, min(1, floor / limit)))
+        # The first pair of coordinates is the fixed pivot. The second is the tip,
+        # 66 pixels away. Subtract sine because canvas y-coordinates increase downward.
         self.c.coords(self.needle, 239, 94, 239+66*math.cos(angle), 94-66*math.sin(angle))
         self.c.itemconfig(self.indicator, text=f"FLOOR   {floor}")
 
@@ -282,14 +314,20 @@ class Hotel:
         gap = max(gap, min(1, max(0, (tick-15)/10)))
         for door, x, direction in zip(self.doors, (125,238), (-1,1)):
             self.c.coords(door, x + direction*113*gap, 114)
+        # Between ticks 5 and 15, progress goes from 0 to 1. Halfway through a ride
+        # from 4 to -2, the counter shows 1, halfway between those two floors.
         progress = min(1, max(0, (tick-5)/10))
         shown = round(self.floor + (floor-self.floor)*progress)
         self.dial(shown)
+        # Swap the scenery while both doors are shut. A correct stop reveals the
+        # guest's room. Any other stop reveals the ordinary corridor (image 10).
         if tick == 6:
             self.c.itemconfig(self.room, image=self.art[str(self.guest if isCorrect(floor,self.target) else 10)])
         if tick == 25:
             self.ride_timer = None
             return self.arrive(floor)
+        # Schedule one more frame and give control back to Tkinter. This is why
+        # the Leave shift button still works while the lift is travelling.
         self.ride_timer = self.root.after(30, self.travel, floor, tick+1)
 
     def arrive(self, floor):
@@ -307,6 +345,8 @@ class Hotel:
             self.number.set("")
             self.entry.focus_set()
         else:
+            # Record a guest's score only when their trip is over. A first miss gets
+            # a retry above. A second miss records a zero and advances the shift.
             points = (10 if self.take == 1 else 5) if correct else 0
             self.scores.append(points)
             self.lamps()
@@ -320,6 +360,8 @@ class Hotel:
     def displayResults(self):
         self.clear()
         score = sum(self.scores)
+        # Keep a separate best for each difficulty during this session. The grade
+        # thresholds run highest first, so the first match gives the final letter.
         self.best[self.level] = max(score, self.best.get(self.level, 0))
         grade = next(g for mark,g in [(91,"A+"),(80,"A"),(70,"B"),(60,"C"),(50,"D"),(0,"F")] if score >= mark)
         self.image(125, 114, 11)

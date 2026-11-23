@@ -4,8 +4,8 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from student_data import FOLDER, validate_students, load_students, results, save_students, sync_json
 
-BG, WHITE, INK = "#F6F4ED", "#FFFFFF", "#273B37"
-BLUE, MUTED, LINE = "#315F53", "#52665F", "#DEE5EE"
+BG, WHITE, INK = "#f1ecdf", "#fffaf0", "#202d3a"
+BLUE, MUTED, LINE = "#784135", "#545d60", "#d3cbbb"
 
 
 class StudentManager:
@@ -15,56 +15,68 @@ class StudentManager:
         self.filter = "all"
         self.sort_key, self.descending = "number", False
         self.query = tk.StringVar()
-        root.title("Student Manager")
-        root.geometry("1120x780")
-        root.minsize(980, 700)
+        root.title("Class Ledger · Student Manager")
+        root.geometry("1080x690")
+        root.minsize(980, 675)
         root.configure(bg=BG)
         style = ttk.Style(root)
         style.theme_use("clam")
-        style.configure("Treeview", rowheight=32, font=("Segoe UI", 11), background=WHITE, fieldbackground=WHITE)
-        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"), padding=8)
-        style.map("Treeview", background=[("selected", BLUE)], foreground=[("selected", WHITE)])
-
-        head = tk.Frame(root, bg=INK, padx=28, pady=16)
-        head.pack(fill="x")
-        self.label(head, "Class register", 25, WHITE, True).pack(side="left")
-        self.label(head, "Student Manager", 11, "#DAD8C9").pack(side="right")
-        main = tk.Frame(root, bg=BG, padx=24, pady=16)
+        style.configure("Treeview", rowheight=30, borderwidth=0, font=("Segoe UI", 10),
+                        foreground=INK, background=WHITE, fieldbackground=WHITE)
+        style.configure("Treeview.Heading", background=INK, foreground=WHITE,
+                        font=("Segoe UI", 9, "bold"), padding=6, relief="flat")
+        style.map("Treeview.Heading", background=[("active", "#394654")])
+        style.map("Treeview", background=[("selected", "#cfdbdf")], foreground=[("selected", INK)])
+        main = tk.Frame(root, bg=BG, padx=22, pady=14)
         main.pack(fill="both", expand=True)
-        cards = tk.Frame(main, bg=BG)
-        cards.pack(fill="x", pady=(0, 16))
-        self.stats = []
-        for title in ("Students", "Class average", "Highest mark", "Lowest mark"):
-            card = tk.Frame(cards, bg=WHITE, padx=16, pady=8)
-            card.pack(side="left", fill="x", expand=True, padx=3)
-            self.label(card, title, 10, MUTED).pack(anchor="w")
-            value = self.label(card, "—", 22, BLUE, True)
-            value.pack(anchor="w")
-            self.stats.append(value)
-
+        head = tk.Frame(main, bg=BG)
+        head.pack(fill="x", pady=(0, 10))
+        tk.Label(head, text="Class Ledger", font=("Palatino Linotype", 31), bg=BG, fg=INK).pack(side="left")
+        self.summary = self.label(head, "", 10, MUTED)
+        self.summary.pack(side="right")
+        tk.Frame(main, height=2, bg=INK).pack(fill="x", pady=(0, 12))
         bar = tk.Frame(main, bg=BG)
         bar.pack(fill="x", pady=(0, 12))
         self.label(bar, "Name or number", 10).pack(side="left", padx=(0, 6))
         entry = ttk.Entry(bar, textvariable=self.query, width=19)
         entry.pack(side="left", fill="x", expand=True, ipady=5)
+        root.bind("<Control-f>", lambda _: (entry.focus_set(), entry.selection_range(0, "end")))
         entry.bind("<Return>", lambda event: self.set_filter("search"))
         for title, mode in [("Find", "search"), ("All", "all"), ("Highest", "highest"), ("Lowest", "lowest")]:
             self.button(bar, title, lambda m=mode: self.set_filter(m), False).pack(side="left", padx=3)
 
         self.titles = dict(number="Number", name="Student", coursework_total="Coursework /60",
                            exam="Exam /100", percentage="Overall %", grade="Grade")
-        grid = tk.Frame(main)
-        grid.pack(fill="both", expand=True)
+        spread = tk.Frame(main, bg=BG)
+        spread.pack(fill="both", expand=True)
+        margin = tk.Frame(spread, bg=INK, width=211, padx=12, pady=8)
+        margin.pack(side="right", fill="y", padx=(12, 0))
+        margin.pack_propagate(False)
+        self.label(margin, "Grade index", 16, WHITE).pack(anchor="w")
+        self.bands = {}
+        for grade in "ABCDF":
+            btn = self.button(margin, grade, lambda g=grade: self.set_filter(g), False)
+            btn.configure(anchor="w", font=("Consolas", -14), padx=8, pady=1)
+            btn.pack(fill="x", pady=(3, 0))
+            self.bands[grade] = btn
+        tk.Frame(margin, height=1, bg="#626969").pack(fill="x", pady=8)
+        self.label(margin, "Record notes", 15, WHITE).pack(anchor="w")
+        self.note = self.label(margin, "", 10, "#ece1cb")
+        self.note.configure(wraplength=179, justify="left", font=("Segoe UI", -14))
+        self.note.pack(anchor="w", pady=5)
+        grid = tk.Frame(spread)
+        grid.pack(side="left", fill="both", expand=True)
         self.table = ttk.Treeview(grid, columns=list(self.titles), show="headings", selectmode="browse")
         for key, title in self.titles.items():
             self.table.heading(key, text=title, command=lambda k=key: self.sort(k))
-            self.table.column(key, width=185 if key == "name" else 110, anchor="w" if key == "name" else "center")
+            self.table.column(key, width={"name": 139, "coursework_total": 151}.get(key, 81), minwidth=48, anchor="w" if key == "name" else "center")
         scroll = ttk.Scrollbar(grid, command=self.table.yview)
         self.table.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
         self.table.pack(fill="both", expand=True)
-        self.table.tag_configure("alternate", background="#F3F2EB")
+        self.table.tag_configure("alternate", background="#f3eee4")
         self.table.bind("<Double-1>", lambda e: self.view_selected() if self.table.identify_row(e.y) else None)
+        self.table.bind("<<TreeviewSelect>>", self.annotate)
         self.table.bind("<Return>", lambda e: self.view_selected())
 
         tools = tk.Frame(main, bg=BG)
@@ -82,11 +94,11 @@ class StudentManager:
 
     def label(self, parent, text, size=11, color=INK, bold=False):
         return tk.Label(parent, text=text, bg=parent["bg"], fg=color,
-                        font=("Segoe UI", size, "bold" if bold else "normal"))
+                        font=("Palatino Linotype" if size >= 15 else "Segoe UI", size, "bold" if bold else "normal"))
 
     def button(self, parent, text, command, primary=True):
         return tk.Button(parent, text=text, command=command, bg=BLUE if primary else "#E5E3D8",
-                         fg=WHITE if primary else INK, relief="flat", padx=12, pady=7, cursor="hand2")
+                         fg=WHITE if primary else INK, relief="flat", bd=0, padx=12, pady=6, cursor="hand2")
 
     def reload(self):
         try:
@@ -119,10 +131,16 @@ class StudentManager:
     def refresh(self):
         rows = [results(s) for s in self.students]
         percentages = [s["percentage"] for s in rows]
-        values = [str(len(rows)), f"{sum(percentages) / len(rows):.2f}%" if rows else "—",
-                  f"{max(percentages):.2f}%" if rows else "—", f"{min(percentages):.2f}%" if rows else "—"]
-        for label, value in zip(self.stats, values):
-            label.configure(text=value)
+        average = f"{sum(percentages)/len(rows):.1f}%" if rows else "—"
+        extent = f"{min(percentages):.1f}–{max(percentages):.1f}%" if rows else "—"
+        self.summary.configure(text=f"{len(rows)} students     /     Class mean {average}     /     Range {extent}")
+        for grade, btn in self.bands.items():
+            count = sum(s["grade"] == grade for s in rows)
+            bars = round(9 * count / len(rows)) if rows else 0
+            btn.configure(text=f"{grade}   {'━'*bars:<9} {count:>3}", bg=BLUE if self.filter == grade else "#e6decc",
+                          fg=WHITE if self.filter == grade else INK)
+        if self.filter in self.bands:
+            rows = [s for s in rows if s["grade"] == self.filter]
         if self.filter == "search":
             query = self.query.get().strip().casefold()
             rows = [s for s in rows if query in s["name"].casefold() or query == str(s["number"])]
@@ -141,8 +159,22 @@ class StudentManager:
             arrow = (" ▼" if self.descending else " ▲") if key == self.sort_key else ""
             self.table.heading(key, text=title + arrow)
         view = {"all": "All records", "search": "Search results", "highest": "Highest score (including ties)",
-                "lowest": "Lowest score (including ties)"}[self.filter]
+                "lowest": "Lowest score (including ties)"}.get(self.filter, f"Grade {self.filter}")
         self.status.configure(text=f"{view} · {len(rows)} of {len(self.students)} students shown.")
+
+        self.annotate()
+
+    def annotate(self, event=None):
+        selected = self.table.selection()
+        s = next((results(s) for s in self.students if selected and str(s["number"]) == selected[0]), None)
+        if s:
+            gap = next((mark - s["total"] for mark in (64, 80, 96, 112) if mark > s["total"]), 0)
+            detail = f"{gap} more mark{'s' if gap != 1 else ''} to the next grade." if gap else "Top grade band."
+            marks = " + ".join(map(str, s["coursework"]))
+            note = f"{s['name']}\nCoursework {marks}\nExam {s['exam']}/100\n{detail}"
+        else:
+            note = "Select a student to see their mark breakdown."
+        self.note.configure(text=note)
 
     def sort(self, key):
         self.descending = not self.descending if key == self.sort_key else False

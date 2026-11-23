@@ -42,6 +42,7 @@ def randomInt(level):
 
 
 def decideOperation():
+    # A plus sign sends the lift up; a minus sign sends it down.
     return random.choice(("+", "−"))
 
 
@@ -61,6 +62,8 @@ def assess_attempt(floor, target, take, room):
     return 0, f"Missed stop. {room} was on floor {target}."
 
 
+# One Stop is one completed question. Keeping the guesses here lets the receipt
+# show both the wrong turn and the correction after the shift ends.
 class Stop(NamedTuple):
     guest: str
     equation: str
@@ -363,6 +366,8 @@ class Hotel:
         self.guesses.append(floor)
         points, message = assess_attempt(floor, self.target, self.take, GUESTS[self.guest][2])
         self.sound("bell" if points else "miss")
+        # Both kinds of miss open a warning. After OK, None gives the guest a
+        # second try; zero completes the trip and goes on the receipt.
         if not points:
             self.c.itemconfig(self.feedback, text="")
             messagebox.showwarning("Wrong floor", message, parent=self.root)
@@ -385,6 +390,8 @@ class Hotel:
 
     def displayResults(self):
         self.clear()
+        # Ten first-try deliveries give 100. One corrected delivery and nine
+        # first tries give 95; each guest still has just one entry on the receipt.
         score = sum(self.scores)
         # Keep a separate best for each difficulty during this session. The grade
         # thresholds run highest first, so the first match gives the final letter.
@@ -414,6 +421,8 @@ class Hotel:
                             bg=IVORY, fg=INK, font=("Consolas", 11), wrap="word")
         page.pack(fill="both", expand=True)
         page.insert("end", f"{self.level.upper()}   /   SHIFT RECEIPT   /   {sum(self.scores)}/100\n")
+        # Read the saved stops in guest order. For 4 minus 6, a first guess of 2
+        # followed by -2 appears as 2 → -2 next to the correct destination.
         for i, stop in enumerate(self.receipt, 1):
             guesses = " → ".join(map(str, stop.guesses))
             page.insert("end", f"\n{i:02}  {stop.guest}   ·   {stop.points}/10\n"
@@ -426,4 +435,6 @@ class Hotel:
 if __name__ == "__main__":
     window = tk.Tk()
     Hotel(window)
+    # From here Tkinter waits for player actions and scheduled animation frames.
+    # Clicking GO runs dispatch(); the last animation frame calls arrive().
     window.mainloop()

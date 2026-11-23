@@ -1,3 +1,5 @@
+from html import escape
+from tkinter import filedialog
 import json
 import random
 import tkinter as tk
@@ -15,11 +17,26 @@ ZINE = Path.home() / ".second-impression" / "zine.json"
 
 def read_jokes(path):
     pairs = []
+    # Split at the first question mark so any punctuation in the punchline survives.
     for line in path.read_text(encoding="utf-8-sig").splitlines():
         setup, sep, answer = line.strip().partition("?")
         if sep and setup.strip() and answer.strip():
             pairs.append((setup.strip() + "?", answer.strip()))
     return list(dict.fromkeys(pairs))
+
+
+def zine_html(jokes):
+    """Lay out the saved jokes in reading order for a browser or printer."""
+    pages = "".join(
+        f"<article><small>Print {i:02}</small><h2>{escape(setup)}</h2><p>{escape(answer)}</p></article>"
+        for i, (setup, answer) in enumerate(jokes, 1)
+    )
+    return """<!doctype html><html lang="en"><meta charset="utf-8">
+<title>My Ink Dog zine</title><style>
+body{max-width:42rem;margin:2rem auto;padding:0 1rem;color:#262820;font:1.1rem Georgia,serif}
+h1{border-bottom:3px solid} article{padding:1rem 0;border-bottom:1px solid;break-inside:avoid}
+small{font-family:monospace} p{color:#973827} @page{margin:18mm}
+</style><body><h1>My Ink Dog zine</h1>""" + pages + "</body></html>"
 
 
 class Press:
@@ -85,6 +102,8 @@ class Press:
         if not self.deck:
             self.deck=self.jokes.copy()
             random.shuffle(self.deck)
+            # pop() draws from the end. Keep the previous joke away from that spot
+            # when a fresh deck is shuffled.
             if len(self.deck)>1 and self.deck[-1]==self.current:
                 self.deck[0],self.deck[-1]=self.deck[-1],self.deck[0]
         self.current=self.deck.pop()
@@ -107,18 +126,21 @@ class Press:
         self.revealed=True
         self.sound("impress")
         self.draw()
-        # The moving mask exposes the second ink layer from top to bottom.
-        mask=self.c.create_rectangle(329,309,864,444,fill=PAPER,outline="")
-        roller=self.c.create_line(332,309,834,309,fill=RED,width=3)
+        # Use the actual wrapped text bounds. The mask covers every letter before
+        # the roller starts moving, even when the punchline takes several lines.
+        left, top, right, bottom = self.c.bbox("punchline")
+        mask = self.c.create_rectangle(left, top, right, bottom, fill=PAPER, outline="")
+        roller = self.c.create_line(left, top, right, top, fill=RED, width=3)
+
         def roll(y):
-            self.c.coords(roller,332,y,834,y)
-            self.c.coords(mask,329,y,864,444)
-            if y<444:
-                self.timer=self.root.after(16,roll,y+9)
+            self.c.coords(roller, left, y, right, y)
+            self.c.coords(mask, left, y, right, bottom)
+            if y < bottom:
+                self.timer = self.root.after(16, roll, min(y + 4, bottom))
             else:
-                self.c.delete(mask,roller)
-                self.timer=None
-        roll(309)
+                self.c.delete(mask, roller)
+                self.timer = None
+        roll(top)
 
     def bookmark(self,joke):
         updated=self.saved.copy()
@@ -145,6 +167,19 @@ class Press:
             self.notice="Joke copied."
         except tk.TclError:
             self.notice="Clipboard unavailable."
+        self.draw()
+
+    def export(self):
+        path = filedialog.asksaveasfilename(parent=self.root, title="Export your zine",
+                    initialfile="My Ink Dog zine.html", defaultextension=".html",
+                    filetypes=[("Printable HTML", "*.html")])
+        if not path:
+            return
+        try:
+            Path(path).write_text(zine_html(self.saved), encoding="utf-8")
+            self.notice = "Zine exported. Open it in a browser to print."
+        except OSError:
+            self.notice = "Couldn’t export the zine. Try another folder."
         self.draw()
 
     def toggle(self):
@@ -192,16 +227,23 @@ class Press:
                 if word in joke[0].lower(): kind=art; break
         self.image(669,63,kind+str(int(printed)))
         title=joke[0] if joke else ("Your first issue starts here." if browsing else "The dog has the paper.")
-        self.text(339,186,title,34 if len(title)<50 else 26,width=514)
+        # A real Label holds the setup. Embedding it in the canvas lets the paper
+        # feed animation carry it along with the artwork.
+        setup = tk.Label(self.c, text=title, wraplength=512, justify="left", anchor="nw",
+                         bg=PAPER, fg=INK, bd=0, padx=0, pady=0,
+                         font=("Georgia", -34 if len(title)<50 else -26))
+        self.c.create_window(339, 186, window=setup, anchor="nw", width=514)
         self.c.create_line(340,293,848,293,fill="#b9ad97",dash=(4,4))
         answer=joke[1] if joke and printed else ("Save a revealed joke to add a page." if browsing else
                "Press Show Punchline for the second ink." if joke else
                "Ask for a joke to load the first sheet." if self.jokes else "Check randomJokes.txt beside the program.")
-        self.text(338,324,answer,30 if joke and printed else 18,RED if printed else INK,width=505)
+        self.text(338,324,answer,30 if joke and printed else 18,RED if printed else INK,width=505,tags="punchline")
         if joke and printed:
             self.button(339,449,165,35,"Unclip favourite" if joke in self.saved else "Save favourite",
                         lambda:self.bookmark(joke))
             self.button(513,449,110,35,"Copy joke",lambda:self.copy(joke))
+            if browsing:
+                self.button(632,449,145,35,"Export zine…",self.export,RED)
         self.c.create_line(340,497,847,497,fill=INK)
 
 

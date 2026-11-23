@@ -45,12 +45,14 @@ class Hotel:
         root.resizable(False, False)
         self.c = tk.Canvas(root, width=900, height=540, bg=INK, highlightthickness=0)
         self.c.pack()
+        # Keep the images here so Tkinter can still display them when the screen changes.
         self.art = {p.stem: tk.PhotoImage(file=str(p)) for p in ASSETS.glob("*.png")}
         self.best, self.muted = {}, False
         root.iconphoto(True, self.art["crest"])
         if winsound:
             root.iconbitmap(str(ASSETS / "hotel.ico"))
         self.music_on = True
+        # The radio uses a separate player so the lift bell can ring over the music.
         self.player = ctypes.windll.winmm.mciSendStringW if winsound else None
         if self.player and self.player(f'open "{ASSETS / "lounge.wav"}" type waveaudio alias hotelradio', None, 0, 0):
             self.player = None
@@ -146,6 +148,7 @@ class Hotel:
         for i, (level, room) in enumerate(zip(LEVELS, (0, 2, 9))):
             x = 35 + 284*i
             self.image(x, 211, f"ticket{room}")
+            # Each button remembers its own difficulty when the menu is built.
             self.button(x, 353, 262, 55, level + "   →", lambda choice=level: self.start(choice), WINE)
             low, high = LEVELS[level]
             detail = f"Operands {low:,}–{high:,}"
@@ -164,6 +167,7 @@ class Hotel:
         if len(self.scores) == 10:
             return self.displayResults()
         self.clear()
+        # Each finished guest has one score, so counting the scores tells us who is next.
         self.guest = self.guests[len(self.scores)]
         name, quote, _ = GUESTS[self.guest]
         a, b, op = randomInt(self.level), randomInt(self.level), decideOperation()
@@ -218,6 +222,7 @@ class Hotel:
         self.entry.focus_set()
 
     def dispatch(self):
+        # Enter and GO share this handler. Ignore extra presses while the lift is moving.
         if self.state == "next":
             return self.displayProblem()
         if self.state != "answer":
@@ -238,12 +243,13 @@ class Hotel:
 
     def dial(self, floor):
         limit = 2 * LEVELS[self.level][1]
+        # Large guesses can move the floor counter past the end of the dial. Clamp the needle to its arc.
         angle = math.radians(90 - 69 * max(-1, min(1, floor / limit)))
         self.c.coords(self.needle, 239, 94, 239+66*math.cos(angle), 94-66*math.sin(angle))
         self.c.itemconfig(self.indicator, text=f"FLOOR   {floor}")
 
     def travel(self, floor, tick):
-        # Close after a retry, move the counter, then slide both doors behind the facade.
+        # On a retry the doors start open. Close them, move the counter, then open them at the new floor.
         gap = max(0, 1-tick/5) if self.take == 2 else 0
         gap = max(gap, min(1, max(0, (tick-15)/10)))
         for door, x, direction in zip(self.doors, (125,238), (-1,1)):
@@ -264,6 +270,7 @@ class Hotel:
         self.go.config(state="normal")
         if not correct and self.take == 1:
             self.state, self.take = "answer", 2
+            # The retry starts where the player landed, so the hint counts floors from here.
             distance = self.target-floor
             direction = "up" if distance > 0 else "down"
             message = f"Wrong landing. Go {direction} {abs(distance):,} more. Enter the new floor."

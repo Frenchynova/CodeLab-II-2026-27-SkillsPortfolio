@@ -40,6 +40,7 @@ def isCorrect(answer, destination):
 
 class Hotel:
     def __init__(self, root):
+        self.ride_timer = None
         self.root = root
         root.title("Floor Zero  ·  The Impossible Hotel")
         root.resizable(False, False)
@@ -79,6 +80,9 @@ class Hotel:
         return b
 
     def clear(self):
+        if self.ride_timer is not None:
+            self.root.after_cancel(self.ride_timer)
+            self.ride_timer = None
         self.root.unbind("<Return>")
         self.c.delete("all")
         for w in self.c.winfo_children():
@@ -195,10 +199,34 @@ class Hotel:
         self.points = self.text(743, 327, f"{sum(self.scores)} / 100", 21, GOLD)
         self.text(743, 360, "SHIFT SCORE", 12, GOLD, "Bahnschrift")
         self.lamps()
+        self.button(12, 509, 106, 29, "Leave shift", self.leave_shift)
         self.feedback = self.text(505, 475, "Enter a floor number or use the keypad.", 17, IVORY, "Segoe UI", width=370)
         self.entry.focus_set()
         self.root.bind("<Return>", lambda _: self.dispatch())
         self.audio()
+
+    def leave_shift(self):
+        dialog = tk.Toplevel(self.root, bg=INK)
+        dialog.title("Leave shift?")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        tk.Label(dialog, text="Return to the lobby?", font=("Georgia", 18), bg=INK, fg=IVORY).pack(padx=25, pady=(18, 5))
+        tk.Label(dialog, text="Your current shift score will be discarded.", bg=INK, fg=GOLD).pack(padx=25)
+        row = tk.Frame(dialog, bg=INK)
+        row.pack(pady=16)
+        def leave():
+            dialog.destroy()
+            self.home()
+        keep = tk.Button(row, text="Keep playing", command=dialog.destroy)
+        keep.pack(side="left", padx=5)
+        tk.Button(row, text="Leave shift", bg=WINE, fg=IVORY, command=leave).pack(side="left", padx=5)
+        dialog.bind("<Escape>", lambda _: dialog.destroy())
+        dialog.update_idletasks()
+        x = self.root.winfo_rootx() + (900 - dialog.winfo_width()) // 2
+        y = self.root.winfo_rooty() + (540 - dialog.winfo_height()) // 2
+        dialog.geometry(f"{x:+d}{y:+d}")
+        dialog.grab_set()
+        keep.focus_set()
 
     def lamps(self):
         self.c.delete("lamp")
@@ -260,8 +288,9 @@ class Hotel:
         if tick == 6:
             self.c.itemconfig(self.room, image=self.art[str(self.guest if isCorrect(floor,self.target) else 10)])
         if tick == 25:
+            self.ride_timer = None
             return self.arrive(floor)
-        self.root.after(30, self.travel, floor, tick+1)
+        self.ride_timer = self.root.after(30, self.travel, floor, tick+1)
 
     def arrive(self, floor):
         self.floor = floor

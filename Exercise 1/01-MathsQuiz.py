@@ -429,6 +429,5 @@ class Hotel:
 if __name__ == "__main__":
     window = tk.Tk()
     Hotel(window)
-    # From here Tkinter waits for player actions and scheduled animation frames.
-    # Clicking GO runs dispatch(); the last animation frame calls arrive().
+
     window.mainloop()

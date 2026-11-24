@@ -128,6 +128,7 @@ class StudentManager:
         self.refresh()
 
     def refresh(self):
+
         # Summarise the whole class before narrowing the rows shown in the table.
         rows = [results(s) for s in self.students]
         percentages = [s["percentage"] for s in rows]
@@ -145,6 +146,7 @@ class StudentManager:
             query = self.query.get().strip().casefold()
             rows = [s for s in rows if query in s["name"].casefold() or query == str(s["number"])]
         elif rows and self.filter in ("highest", "lowest"):
+
             # Compare every total with the extreme so tied students appear together.
             target = (max if self.filter == "highest" else min)(s["total"] for s in rows)
             rows = [s for s in rows if s["total"] == target]
@@ -203,6 +205,7 @@ class StudentManager:
 
     def commit(self, candidates):
         try:
+
             # If another editor changed the register, ask for a reload before saving.
             if self.marks_path.read_bytes() != self.source_bytes:
                 raise ValueError("The TXT file changed outside the app. Reload files before editing.")

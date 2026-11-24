@@ -18,6 +18,7 @@ ZINE = Path.home() / ".second-impression" / "zine.json"
 
 def read_jokes(path):
     pairs = []
+
     # Split at the first question mark so any punctuation in the punchline survives.
     for line in path.read_text(encoding="utf-8-sig").splitlines():
         setup, sep, answer = line.strip().partition("?")
@@ -95,6 +96,7 @@ class Press:
         if not self.deck:
             self.deck=self.jokes.copy()
             random.shuffle(self.deck)
+
             # pop() draws from the end. Keep the previous joke away from that spot
             # when a fresh deck is shuffled.
             if len(self.deck)>1 and self.deck[-1]==self.current:
@@ -119,6 +121,7 @@ class Press:
         self.revealed=True
         self.sound("impress")
         self.draw()
+
         # Use the actual wrapped text bounds. The mask covers every letter before
         # the roller starts moving, even when the punchline takes several lines.
         left, top, right, bottom = self.c.bbox("punchline")
@@ -220,6 +223,7 @@ class Press:
                 if word in joke[0].lower(): kind=art; break
         self.image(669,63,kind+str(int(printed)))
         title=joke[0] if joke else ("Your first issue starts here." if browsing else "The dog has the paper.")
+
         # A real Label holds the setup. Embedding it in the canvas lets the paper
         # feed animation carry it along with the artwork.
         setup = tk.Label(self.c, text=title, wraplength=512, justify="left", anchor="nw",

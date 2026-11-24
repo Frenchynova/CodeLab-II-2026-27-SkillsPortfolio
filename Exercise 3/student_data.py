@@ -50,6 +50,7 @@ def load_students(folder=FOLDER):
             rows = [row for row in csv.reader(file) if any(v.strip() for v in row)]
         if not rows or len(rows[0]) != 1:
             raise ValueError("The first line must contain the class size.")
+
         # The first line is a count. Each remaining row supplies one student.
         count = int(rows[0][0])
         students = []
@@ -72,6 +73,7 @@ def load_students(folder=FOLDER):
 def results(student):
     coursework = sum(student["coursework"])
     total = coursework + student["exam"]
+
     # Find the current band first. The band immediately above it supplies the
     # target in Record notes: 111 is a B and needs one more mark for an A.
     index = next(i for i, (_, minimum) in enumerate(GRADE_BANDS) if total >= minimum)

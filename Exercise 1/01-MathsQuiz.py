@@ -6,6 +6,10 @@ from contextlib import suppress
 import random
 import tkinter as tk
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from game_canvas import GameCanvas
 from typing import NamedTuple
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
@@ -81,9 +85,7 @@ class Hotel:
         self.ride_timer = None
         self.root = root
         root.title("Floor Zero  ·  The Impossible Hotel")
-        root.resizable(False, False)
-        self.c = tk.Canvas(root, width=900, height=540, bg=INK, highlightthickness=0)
-        self.c.pack()
+        self.c = GameCanvas(root, 900, 540, INK)
 
         # Keep the images here so Tkinter can still display them when the screen changes.
         self.art = {p.stem: tk.PhotoImage(file=str(p)) for p in ASSETS.glob("*.png")}
@@ -373,7 +375,7 @@ class Hotel:
         # Swap the scenery while both doors are shut. A correct stop reveals the
         # guest's room. Any other stop reveals the ordinary corridor (image 10).
         if tick == 6:
-            self.c.itemconfig(self.room, image=self.art[str(self.guest if isCorrect(floor,self.target) else 10)])
+            self.c.set_image(self.room, self.art[str(self.guest if isCorrect(floor,self.target) else 10)])
         if tick == 25:
             self.ride_timer = None
             return self.arrive(floor)

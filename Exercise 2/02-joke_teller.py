@@ -5,6 +5,10 @@ from contextlib import suppress
 import random
 import tkinter as tk
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from game_canvas import GameCanvas
 
 try:
     import winsound
@@ -45,9 +49,7 @@ class Press:
     def __init__(self, root):
         self.root = root
         root.title("Ink Dog Press  ·  Second Impression")
-        root.resizable(False, False)
-        self.c = tk.Canvas(root, width=900, height=550, bg=DESK, highlightthickness=0)
-        self.c.pack()
+        self.c = GameCanvas(root, 900, 550, DESK)
         self.art = {p.stem: tk.PhotoImage(file=str(p)) for p in (HERE/"ink").glob("*.png")}
         root.iconphoto(True, self.art["mark"])
         self.jokes = []
@@ -106,7 +108,7 @@ class Press:
         self.revealed=False
         self.view(None)
         self.sound("feed")
-        self.c.addtag_enclosed("sheet", 324, 65, 879, 513)
+        self.c.addtag_enclosed("sheet", *(v * self.c.factor for v in (324, 65, 879, 513)))
         self.c.move("sheet", 12, 0)
         self.c.move("dog", 8, 0)
         def feed(steps):
@@ -124,7 +126,7 @@ class Press:
 
         # Use the actual wrapped text bounds. The mask covers every letter before
         # the roller starts moving, even when the punchline takes several lines.
-        left, top, right, bottom = self.c.bbox("punchline")
+        left, top, right, bottom = (v / self.c.factor for v in self.c.bbox("punchline"))
         mask = self.c.create_rectangle(left, top, right, bottom, fill=PAPER, outline="")
         roller = self.c.create_line(left, top, right, top, fill=RED, width=3)
 
@@ -223,7 +225,7 @@ class Press:
                 if word in joke[0].lower(): kind=art; break
         self.image(669,63,kind+str(int(printed)))
         title=joke[0] if joke else ("Your first issue starts here." if browsing else "The dog has the paper.")
-
+        
         # A real Label holds the setup. Embedding it in the canvas lets the paper
         # feed animation carry it along with the artwork.
         setup = tk.Label(self.c, text=title, wraplength=512, justify="left", anchor="nw",

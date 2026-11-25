@@ -15,6 +15,8 @@ class StudentManager:
         self.sort_key, self.descending = "number", False
         self.query = tk.StringVar()
         root.title("Class Ledger · Student Manager")
+        self.logo = tk.PhotoImage(file=str(Path(__file__).with_name("ledger.png")))
+        root.iconphoto(True, self.logo)
         root.geometry("1080x690")
         root.minsize(980, 675)
         root.configure(bg=BG)
@@ -30,7 +32,7 @@ class StudentManager:
         main.pack(fill="both", expand=True)
         head = tk.Frame(main, bg=BG)
         head.pack(fill="x", pady=(0, 10))
-        tk.Label(head, text="Class Ledger", font=("Palatino Linotype", 31), bg=BG, fg=INK).pack(side="left")
+        tk.Label(head, text="Class Ledger", font=("Palatino Linotype", 31), bg=BG, fg=INK, image=self.logo, compound="left", padx=8).pack(side="left")
         self.summary = self.label(head, "", 10, MUTED)
         self.summary.pack(side="right")
         tk.Frame(main, height=2, bg=INK).pack(fill="x", pady=(0, 12))

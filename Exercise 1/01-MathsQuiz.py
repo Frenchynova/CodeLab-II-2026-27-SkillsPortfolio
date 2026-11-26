@@ -186,8 +186,25 @@ class Hotel:
         self.clear()
         self.image(0, 0, "title")
         self.text(40, 507, "Radio  ·  Local Forecast – Elevator / Kevin MacLeod", 12, GOLD, "Segoe UI")
-        self.button(36, 435, 200, 48, "Enter the hotel   →", self.displayMenu, WINE)
+        self.text(36, 375, "You run the hotel lift. Solve each guest’s sum to find their floor.", 17, width=276)
+        self.button(36, 435, 155, 48, "Enter the hotel   →", self.displayMenu, WINE)
+        self.button(199, 435, 112, 48, "How to play", self.how_to_play)
         self.root.bind("<Return>", lambda _: self.displayMenu())
+        self.audio()
+
+    def how_to_play(self):
+        self.clear()
+        self.image(33, 22, "crest")
+        self.text(95, 39, "F L O O R   Z E R O", 14, GOLD, "Bahnschrift")
+        self.text(35, 86, "How to play", 46)
+        self.text(36, 165, "Choose a difficulty. Ten guests are waiting for a lift.", 22)
+        self.text(36, 220, "Read each sum as a lift journey. Start on the first floor shown, then go up for + "
+                  "or down for −. For example, 4 − 6 takes you to floor −2.", 20, width=740)
+        self.text(36, 305, "Type your answer or use the lift keypad. The ± key changes the sign. "
+                  "Press Enter or click GO to send the lift.", 20, width=740)
+        self.text(36, 398, "First try: 10 points. Second try: 5. Two misses: 0. A perfect shift earns 100.", 18, GOLD)
+        self.button(36, 470, 135, 42, "←   Lobby", self.home)
+        self.button(185, 470, 180, 42, "Choose your shift   →", self.displayMenu, WINE)
         self.audio()
 
     def displayMenu(self):

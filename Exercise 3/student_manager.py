@@ -1,4 +1,3 @@
-"""Run this file to open the class register."""
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
